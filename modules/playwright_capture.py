@@ -305,7 +305,8 @@ async def capture_article_images(article_url: str,
 
     except Exception as e:
         logger.error(f"Playwright capture failed for {article_url}: {e}", exc_info=True)
-        results = _generate_placeholders(results, output_dir)
+        # Return None paths — pptx_generator will remove the image shapes
+        # instead of showing grey placeholder boxes
 
     return results
 

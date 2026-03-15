@@ -148,6 +148,19 @@ def _find_shape_by_id(slide, shape_id: int):
     return None
 
 
+def _enable_autofit(bodyPr):
+    """Enable text auto-shrink on a bodyPr element so text fits the box."""
+    if bodyPr is None:
+        return
+    # Remove any existing auto-size settings
+    for tag in ['a:noAutofit', 'a:normAutofit', 'a:spAutoFit']:
+        old = bodyPr.find(qn(tag))
+        if old is not None:
+            bodyPr.remove(old)
+    # Add normAutofit — PowerPoint will shrink font to fit
+    etree.SubElement(bodyPr, qn('a:normAutofit'))
+
+
 def _set_star_color(shape, color_hex: str):
     """Set the fill color of a star shape."""
     spPr = shape._element.find(qn('p:spPr'))
@@ -293,35 +306,122 @@ def _build_implications_xml(main_point: str, sub_points: list,
     return paragraphs
 
 
-def _replace_image(slide, shape_name: str, image_path: str, prs: Presentation):
-    """Replace an image in the slide by finding the pic element and swapping the blip."""
-    if not image_path or not os.path.exists(image_path):
-        logger.warning(f"Image not found for {shape_name}: {image_path}")
-        return False
+def _is_placeholder_image(image_path: str) -> bool:
+    """Check if an image is a grey placeholder (generated when capture fails)."""
+    return image_path and "placeholder" in os.path.basename(image_path)
 
-    # Find the pic element by name in raw XML
+
+def _remove_pic_shape(slide, shape_name: str):
+    """Remove an image shape from the slide by name."""
     spTree = slide._element.find(qn('p:cSld')).find(qn('p:spTree'))
     for pic_elem in spTree.findall(qn('p:pic')):
         nvPicPr = pic_elem.find(qn('p:nvPicPr'))
         if nvPicPr is not None:
             cNvPr = nvPicPr.find(qn('p:cNvPr'))
             if cNvPr is not None and cNvPr.get('name') == shape_name:
-                # Found the target pic element
+                spTree.remove(pic_elem)
+                logger.info(f"Removed unused image shape: {shape_name}")
+                return True
+    return False
+
+
+def _replace_image(slide, shape_name: str, image_path: str, prs: Presentation):
+    """Replace an image in the slide, maintaining aspect ratio via srcRect crop.
+
+    Crops the source image (from bottom/sides) to match the template slot's
+    aspect ratio so it fills the slot without distortion.
+    """
+    if not image_path or not os.path.exists(image_path):
+        logger.warning(f"Image not found for {shape_name}: {image_path}")
+        return False
+
+    spTree = slide._element.find(qn('p:cSld')).find(qn('p:spTree'))
+    for pic_elem in spTree.findall(qn('p:pic')):
+        nvPicPr = pic_elem.find(qn('p:nvPicPr'))
+        if nvPicPr is not None:
+            cNvPr = nvPicPr.find(qn('p:cNvPr'))
+            if cNvPr is not None and cNvPr.get('name') == shape_name:
                 blipFill = pic_elem.find(qn('p:blipFill'))
                 if blipFill is not None:
                     blip = blipFill.find(qn('a:blip'))
                     if blip is not None:
-                        # Add the new image to the presentation
+                        # Swap the image blob
                         rel = slide.part.relate_to(
                             prs.part._package.get_or_add_image_part(image_path),
                             "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
                         )
                         blip.set(qn('r:embed'), rel)
+
+                        # Calculate srcRect to maintain aspect ratio
+                        _apply_aspect_fill(pic_elem, image_path)
+
                         logger.info(f"Replaced image for {shape_name}")
                         return True
 
     logger.warning(f"Could not find pic element: {shape_name}")
     return False
+
+
+def _apply_aspect_fill(pic_elem, image_path: str):
+    """Set srcRect on blipFill so the image fills the slot without distortion.
+
+    Crops from bottom (for tall images) or sides (for wide images) to match
+    the template slot's aspect ratio.
+    """
+    from PIL import Image as PILImage
+
+    try:
+        with PILImage.open(image_path) as img:
+            img_w, img_h = img.size
+
+        # Get slot dimensions from the pic element's spPr/xfrm/ext
+        spPr = pic_elem.find(qn('p:spPr'))
+        if spPr is None:
+            return
+        xfrm = spPr.find(qn('a:xfrm'))
+        if xfrm is None:
+            return
+        ext = xfrm.find(qn('a:ext'))
+        if ext is None:
+            return
+        slot_w = int(ext.get('cx', 0))
+        slot_h = int(ext.get('cy', 0))
+        if slot_w == 0 or slot_h == 0:
+            return
+
+        slot_ratio = slot_w / slot_h
+        img_ratio = img_w / img_h
+
+        # srcRect values are in 1/100000 of the source image dimension
+        l_crop = r_crop = t_crop = b_crop = 0
+
+        if img_ratio < slot_ratio:
+            # Image is taller than slot — crop from bottom
+            desired_h = img_w / slot_ratio
+            b_crop = int((img_h - desired_h) / img_h * 100000)
+        elif img_ratio > slot_ratio:
+            # Image is wider than slot — crop from sides equally
+            desired_w = img_h * slot_ratio
+            side_crop = int((img_w - desired_w) / img_w * 100000 / 2)
+            l_crop = side_crop
+            r_crop = side_crop
+
+        # Apply srcRect
+        blipFill = pic_elem.find(qn('p:blipFill'))
+        # Remove existing srcRect if any
+        old_srcRect = blipFill.find(qn('a:srcRect'))
+        if old_srcRect is not None:
+            blipFill.remove(old_srcRect)
+
+        if l_crop or r_crop or t_crop or b_crop:
+            srcRect = etree.SubElement(blipFill, qn('a:srcRect'))
+            srcRect.set('l', str(l_crop))
+            srcRect.set('t', str(t_crop))
+            srcRect.set('r', str(r_crop))
+            srcRect.set('b', str(b_crop))
+
+    except Exception as e:
+        logger.warning(f"Could not apply aspect fill: {e}")
 
 
 def _replace_image_by_id(slide, shape_id: int, image_path: str, prs: Presentation):
@@ -412,6 +512,9 @@ def _update_summary(slide, summary_points: list, relevant_info: str = ""):
     for p in txBody.findall(qn('a:p')):
         txBody.remove(p)
 
+    # Enable auto-fit so text shrinks if it overflows the box
+    _enable_autofit(bodyPr)
+
     # Add summary bullet points
     for para_elem in _build_bullet_paragraphs_xml(summary_points):
         txBody.append(para_elem)
@@ -454,6 +557,11 @@ def _update_implications(slide, main_point: str, sub_points: list):
     txBody = shape._element.find(qn('p:txBody'))
     if txBody is None:
         return False
+
+    # Enable auto-fit so text shrinks if it overflows the box
+    bodyPr = txBody.find(qn('a:bodyPr'))
+    if bodyPr is not None:
+        _enable_autofit(bodyPr)
 
     # Remove existing paragraphs
     for p in txBody.findall(qn('a:p')):
@@ -520,7 +628,9 @@ def _update_source_url(slide, url: str):
     hlinkClick.set(qn('r:id'), rel)
 
     t2 = etree.SubElement(r2, qn('a:t'))
-    t2.text = url
+    # Truncate display text if URL is very long (hyperlink still works with full URL)
+    max_display_len = 120
+    t2.text = url if len(url) <= max_display_len else url[:max_display_len] + "..."
 
     return True
 
@@ -617,8 +727,7 @@ def generate_slide(article: ArticleData, output_filename: str = None) -> Optiona
         _update_stars(slide, article.credibility_score, article.relevancy_score)
         logger.info(f"Updated stars: cred={article.credibility_score}, rel={article.relevancy_score}")
 
-        # 8. Replace images if available
-        # Map: (shape_name_pattern, image_path)
+        # 8. Replace images if available; remove shapes with no image
         # The template image shapes have Japanese names like "図 3", "図 4", etc.
         image_mappings = [
             ("図 3", article.byline_image),       # Publication logo
@@ -628,10 +737,16 @@ def generate_slide(article: ArticleData, output_filename: str = None) -> Optiona
             ("図 19", article.footer_image),       # Footer screenshot
         ]
 
+        any_image_replaced = False
         for shape_name, img_path in image_mappings:
-            if img_path and os.path.exists(img_path):
-                _replace_image(slide, shape_name, img_path, prs)
-                logger.info(f"Replaced image: {shape_name}")
+            if img_path and os.path.exists(img_path) and not _is_placeholder_image(img_path):
+                if _replace_image(slide, shape_name, img_path, prs):
+                    any_image_replaced = True
+                    logger.info(f"Replaced image: {shape_name}")
+            else:
+                # Remove the template's default image shape — cleaner than
+                # showing the wrong article's screenshots or grey boxes
+                _remove_pic_shape(slide, shape_name)
 
         # Generate output filename
         if not output_filename:

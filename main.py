@@ -351,10 +351,48 @@ async def get_stats():
     return stats
 
 
+# === Batch Processing ===
+
+async def run_batch():
+    """Process all unprocessed articles from Notion (CLI mode)."""
+    if not NOTION_API_KEY or not NOTION_DATABASE_ID:
+        logger.error("Notion API key and database ID required for batch processing")
+        logger.error("Set NOTION_API_KEY and NOTION_DATABASE_ID in .env")
+        return
+
+    logger.info("=" * 60)
+    logger.info("Batch Processing — Finding unchecked articles...")
+    logger.info("=" * 60)
+
+    articles = query_unprocessed_articles()
+    if not articles:
+        logger.info("No unprocessed articles found. All done!")
+        return
+
+    logger.info(f"Found {len(articles)} articles to process")
+    for i, article in enumerate(articles, 1):
+        logger.info(f"\n[{i}/{len(articles)}] {article.get('title', 'Untitled')[:70]}")
+        await process_article(article)
+
+    logger.info("=" * 60)
+    logger.info(f"Batch complete: {stats['successful']} succeeded, {stats['failed']} failed")
+    logger.info("=" * 60)
+
+
 # === Server Entry Point ===
 
 def main():
-    """Start the automation server."""
+    """Start the automation server, or run batch processing with --batch."""
+    import argparse
+    parser = argparse.ArgumentParser(description="News Article Slide Automation")
+    parser.add_argument("--batch", action="store_true",
+                        help="Process all unchecked articles and exit (no server)")
+    args = parser.parse_args()
+
+    if args.batch:
+        asyncio.run(run_batch())
+        return
+
     logger.info("=" * 60)
     logger.info("News Article Slide Automation Server")
     logger.info(f"Environment: {ENVIRONMENT}")

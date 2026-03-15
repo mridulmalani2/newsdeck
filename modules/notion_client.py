@@ -168,16 +168,14 @@ def _extract_properties(page: dict) -> Dict:
         elif name_lower in ("implications", "business implications", "impact"):
             result["implications"] = _get_rich_text(prop_data)
 
-        # Evaluation notes — only use if it contains actual content, not error messages
+        # Evaluation notes — skip; this contains source assessment text
+        # (credibility/relevancy judgments) that shouldn't appear on the slide.
+        # Stars are driven by the numeric score columns instead.
         elif "evaluation" in name_lower or "notes" in name_lower:
-            if not result["relevant_info"]:
-                text = _get_rich_text(prop_data)
-                # Filter out error messages from upstream AI evaluation
-                if text and not _is_evaluation_error(text):
-                    result["relevant_info"] = text
+            pass
 
-        # Category / Primary Theme
-        elif name_lower in ("category", "primary theme", "theme", "type"):
+        # Category / Primary Theme / Themes
+        elif name_lower in ("category", "primary theme", "theme", "themes", "type"):
             if prop_type == "select":
                 result["category"] = _get_select(prop_data)
             elif prop_type == "multi_select":
@@ -244,11 +242,11 @@ def query_unprocessed_articles() -> List[Dict]:
     """Query Notion database for articles that haven't been processed yet.
 
     Returns articles where 'Slide Generated' is unchecked/false.
+    Handles pagination (Notion returns max 100 per page).
     """
     try:
         url = f"{NOTION_API_URL}/databases/{NOTION_DATABASE_ID}/query"
 
-        # Filter for unprocessed articles
         filter_body = {
             "filter": {
                 "or": [
@@ -268,20 +266,30 @@ def query_unprocessed_articles() -> List[Dict]:
             ]
         }
 
-        response = httpx.post(
-            url,
-            headers=_get_headers(),
-            json=filter_body,
-            timeout=30
-        )
-        response.raise_for_status()
-        data = response.json()
-
         results = []
-        for page in data.get("results", []):
-            article = _extract_properties(page)
-            if article and not article.get("slide_generated", False):
-                results.append(article)
+        has_more = True
+
+        while has_more:
+            response = httpx.post(
+                url,
+                headers=_get_headers(),
+                json=filter_body,
+                timeout=30
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            for page in data.get("results", []):
+                article = _extract_properties(page)
+                if article and not article.get("slide_generated", False):
+                    results.append(article)
+
+            has_more = data.get("has_more", False)
+            next_cursor = data.get("next_cursor")
+            if has_more and next_cursor:
+                filter_body["start_cursor"] = next_cursor
+            else:
+                has_more = False
 
         logger.info(f"Found {len(results)} unprocessed articles")
         return results
@@ -292,7 +300,10 @@ def query_unprocessed_articles() -> List[Dict]:
 
 
 def update_page_with_slide(page_id: str, slide_path: str) -> bool:
-    """Update a Notion page with the slide link and mark as generated.
+    """Update a Notion page: check the Slide Generated box.
+
+    Tries to also set a Slide Link URL property if it exists in the DB.
+    Falls back to just checking the box if Slide Link property doesn't exist.
 
     Args:
         page_id: Notion page ID
@@ -301,33 +312,47 @@ def update_page_with_slide(page_id: str, slide_path: str) -> bool:
     Returns:
         True if update succeeded
     """
-    try:
-        url = f"{NOTION_API_URL}/pages/{page_id}"
+    url = f"{NOTION_API_URL}/pages/{page_id}"
+    file_url = f"file://{slide_path}"
 
-        # Build file:// URL for local access
-        file_url = f"file://{slide_path}"
-
-        update_body = {
-            "properties": {
-                "Slide Generated": {
-                    "checkbox": True
-                },
-                "Slide Link": {
-                    "url": file_url
-                }
+    # First try: checkbox + slide link
+    update_body = {
+        "properties": {
+            "Slide Generated": {
+                "checkbox": True
+            },
+            "Slide Link": {
+                "url": file_url
             }
         }
+    }
 
+    try:
         response = httpx.patch(
-            url,
-            headers=_get_headers(),
-            json=update_body,
-            timeout=30
+            url, headers=_get_headers(), json=update_body, timeout=30
         )
         response.raise_for_status()
         logger.info(f"Updated Notion page {page_id} with slide link")
         return True
+    except Exception as e:
+        logger.warning(f"Update with Slide Link failed ({e}), retrying checkbox only")
 
+    # Fallback: just check the box (Slide Link property may not exist)
+    update_body = {
+        "properties": {
+            "Slide Generated": {
+                "checkbox": True
+            }
+        }
+    }
+
+    try:
+        response = httpx.patch(
+            url, headers=_get_headers(), json=update_body, timeout=30
+        )
+        response.raise_for_status()
+        logger.info(f"Checked 'Slide Generated' for page {page_id}")
+        return True
     except Exception as e:
         logger.error(f"Failed to update Notion page {page_id}: {e}")
         return False
