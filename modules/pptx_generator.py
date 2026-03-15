@@ -46,6 +46,53 @@ def _format_date(date_str: str) -> str:
 
 logger = logging.getLogger(__name__)
 
+# Patterns that indicate error/system text from upstream AI evaluation
+_ERROR_INDICATORS = [
+    "parsing failed",
+    "evaluation parsing failed",
+    "using default scores",
+    "failed to",
+    "error:",
+    "exception:",
+    "traceback",
+    "no data available",
+    "could not parse",
+    "api error",
+]
+
+
+def _is_error_text(text: str) -> bool:
+    """Check if text looks like an error message from upstream AI evaluation."""
+    if not text:
+        return False
+    text_lower = text.lower().strip()
+    return any(indicator in text_lower for indicator in _ERROR_INDICATORS)
+
+
+def _sanitize_article(article: 'ArticleData') -> 'ArticleData':
+    """Clean article data by filtering out error messages from upstream AI eval."""
+    # Filter relevant_info if it contains error text
+    if _is_error_text(article.relevant_info):
+        logger.warning(f"Filtered error text from relevant_info: {article.relevant_info[:80]}")
+        article.relevant_info = ""
+
+    # Filter summary lines that are error messages
+    if article.summary:
+        lines = article.summary.split('\n')
+        clean_lines = [l for l in lines if not _is_error_text(l)]
+        article.summary = '\n'.join(clean_lines)
+
+    # Filter implications if error text
+    if _is_error_text(article.implications):
+        logger.warning(f"Filtered error text from implications: {article.implications[:80]}")
+        article.implications = ""
+
+    # Filter sub-implications
+    if article.implications_sub:
+        article.implications_sub = [s for s in article.implications_sub if not _is_error_text(s)]
+
+    return article
+
 
 @dataclass
 class ArticleData:
@@ -369,8 +416,8 @@ def _update_summary(slide, summary_points: list, relevant_info: str = ""):
     for para_elem in _build_bullet_paragraphs_xml(summary_points):
         txBody.append(para_elem)
 
-    # Add separator + relevant info if provided
-    if relevant_info:
+    # Add separator + relevant info ONLY if relevant_info has valid content
+    if relevant_info and relevant_info.strip() and not _is_error_text(relevant_info):
         # Separator line
         sep_p = etree.SubElement(txBody, qn('a:p'))
         sep_pPr = etree.SubElement(sep_p, qn('a:pPr'))
@@ -516,6 +563,9 @@ def generate_slide(article: ArticleData, output_filename: str = None) -> Optiona
         Path to the generated .pptx file, or None on failure
     """
     try:
+        # Sanitize article data — filter out error messages from upstream AI eval
+        article = _sanitize_article(article)
+
         # Load template
         prs = Presentation(str(TEMPLATE_PATH))
 
@@ -550,10 +600,13 @@ def generate_slide(article: ArticleData, output_filename: str = None) -> Optiona
         _update_summary(slide, summary_points, article.relevant_info)
         logger.info("Updated summary text")
 
-        # 5. Update implications
-        impl_sub = article.implications_sub or []
-        _update_implications(slide, article.implications, impl_sub)
-        logger.info("Updated implications text")
+        # 5. Update implications (only if we have valid content)
+        if article.implications and article.implications.strip():
+            impl_sub = article.implications_sub or []
+            _update_implications(slide, article.implications, impl_sub)
+            logger.info("Updated implications text")
+        else:
+            logger.warning("No valid implications text — leaving template default")
 
         # 6. Update source URL
         if article.source_url:

@@ -36,6 +36,16 @@ BROWSER_TIMEOUT = int(os.getenv("BROWSER_TIMEOUT", "30000"))
 VIEWPORT_WIDTH = int(os.getenv("VIEWPORT_WIDTH", "1280"))
 VIEWPORT_HEIGHT = int(os.getenv("VIEWPORT_HEIGHT", "720"))
 
+# Mobile viewport for clean article screenshots (iPhone 14 dimensions)
+MOBILE_VIEWPORT_WIDTH = int(os.getenv("MOBILE_VIEWPORT_WIDTH", "390"))
+MOBILE_VIEWPORT_HEIGHT = int(os.getenv("MOBILE_VIEWPORT_HEIGHT", "844"))
+MOBILE_USER_AGENT = os.getenv(
+    "MOBILE_USER_AGENT",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+    "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+)
+COOKIE_DISMISS_TIMEOUT = int(os.getenv("COOKIE_DISMISS_TIMEOUT", "5000"))
+
 # === Article Processing ===
 IMAGE_EXTRACTION_TIMEOUT = int(os.getenv("IMAGE_EXTRACTION_TIMEOUT", "15"))
 MAX_IMAGES_TO_CAPTURE = int(os.getenv("MAX_IMAGES_TO_CAPTURE", "4"))

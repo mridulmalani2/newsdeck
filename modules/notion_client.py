@@ -20,6 +20,28 @@ logger = logging.getLogger(__name__)
 NOTION_API_URL = "https://api.notion.com/v1"
 NOTION_VERSION = "2022-06-28"
 
+# Error indicators from upstream AI evaluation
+_EVAL_ERROR_PATTERNS = [
+    "parsing failed",
+    "evaluation parsing failed",
+    "using default scores",
+    "failed to",
+    "error:",
+    "exception:",
+    "traceback",
+    "no data available",
+    "could not parse",
+    "api error",
+]
+
+
+def _is_evaluation_error(text: str) -> bool:
+    """Check if text from an evaluation/notes field is an error message."""
+    if not text:
+        return False
+    text_lower = text.lower().strip()
+    return any(pattern in text_lower for pattern in _EVAL_ERROR_PATTERNS)
+
 
 def _get_headers() -> dict:
     return {
@@ -146,10 +168,13 @@ def _extract_properties(page: dict) -> Dict:
         elif name_lower in ("implications", "business implications", "impact"):
             result["implications"] = _get_rich_text(prop_data)
 
-        # Evaluation notes
+        # Evaluation notes — only use if it contains actual content, not error messages
         elif "evaluation" in name_lower or "notes" in name_lower:
             if not result["relevant_info"]:
-                result["relevant_info"] = _get_rich_text(prop_data)
+                text = _get_rich_text(prop_data)
+                # Filter out error messages from upstream AI evaluation
+                if text and not _is_evaluation_error(text):
+                    result["relevant_info"] = text
 
         # Category / Primary Theme
         elif name_lower in ("category", "primary theme", "theme", "type"):
@@ -177,11 +202,15 @@ def _extract_properties(page: dict) -> Dict:
 
         # Credibility score
         elif "credibility" in name_lower:
-            result["credibility_score"] = float(_get_number(prop_data))
+            score = float(_get_number(prop_data))
+            if score > 0:
+                result["credibility_score"] = score
 
         # Relevancy / Relevance score
         elif "relevan" in name_lower:
-            result["relevancy_score"] = float(_get_number(prop_data))
+            score = float(_get_number(prop_data))
+            if score > 0:
+                result["relevancy_score"] = score
 
         # Accuracy score
         elif "accuracy" in name_lower:
