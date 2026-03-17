@@ -35,7 +35,7 @@ from config import (
     SLIDES_DIR, LOGS_DIR, NOTION_API_KEY, NOTION_DATABASE_ID
 )
 from modules.pptx_generator import generate_slide_from_notion_data, ArticleData, generate_slide
-from modules.playwright_capture import capture_article_images
+from modules.selenium_capture import capture_article_images
 from modules.notion_client import (
     parse_webhook_payload, query_unprocessed_articles,
     update_page_with_slide, fetch_page_data, mark_page_error
