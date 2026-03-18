@@ -103,12 +103,6 @@ class Grid:
     PADDING_X = 137160          # 0.15"
     PADDING_Y = 91440           # 0.10"
 
-    # Section divider
-    DIVIDER_H = 9144            # 0.01"
-    DIVIDER_OFFSET = 73152      # 0.08" above section
-
-    # Section header color (80% black)
-    HEADER_COLOR = "333333"
 
 
 # === Template Layout Constants (grid-derived) ===
@@ -123,74 +117,65 @@ class TemplateLayout:
     SLIDE_HEIGHT = Grid.SLIDE_HEIGHT
 
     # --- Element 11: Title (Titre 42) ---
-    TITLE_X = Grid.MARGIN_LEFT
-    TITLE_Y = Grid.MARGIN_TOP + 295960 + 36576         # 881176 — below category row
+    TITLE_X = 280657
+    TITLE_Y = 627088
     TITLE_W = Grid.CONTENT_WIDTH
     TITLE_H = 350000
     TITLE_FONT_SIZE = 2000       # hundredths of pt (20pt)
     TITLE_MAX_CHARS = 90
 
     # --- Element 2: Category tag (Rectangle 5) ---
-    CATEGORY_X = Grid.MARGIN_LEFT
-    CATEGORY_Y = Grid.MARGIN_TOP
+    CATEGORY_X = 390180
+    CATEGORY_Y = 260059
     CATEGORY_W = 2012011
     CATEGORY_H = 295960
     CATEGORY_FONT_SIZE = 1200    # 12pt
     CATEGORY_MAX_CHARS = 25
 
-    # --- Element 12: Date (ZoneTexte 6) ---
-    # Same row as category, positioned to its right
-    DATE_X = Grid.MARGIN_LEFT + 2012011 + Grid.GUTTER  # 3017851
-    DATE_Y = Grid.MARGIN_TOP + (295960 - 261610) // 2  # 565815 — v-centered with category
-    DATE_W = 928459
-    DATE_H = 261610
-    DATE_FONT_SIZE = 1100        # 11pt
-
     # --- Element 1: TGR Logo ---
     # Inherited from slide layout — no action needed
 
-    # --- Article image (Picture 15) ---
-    # Aligned with content top (same Y as summary section)
-    ARTICLE_IMG_X = Grid.IMAGE_COL_X
-    ARTICLE_IMG_Y = Grid.CONTENT_Y                      # aligned with summary top
+    # --- Article image (Picture 111) ---
+    ARTICLE_IMG_X = 781696
+    ARTICLE_IMG_Y = 1389079
     ARTICLE_IMG_W = Grid.IMAGE_COL_W
     ARTICLE_IMG_H = Grid.SECTION_H * 2 + Grid.SECTION_SPACING  # 4501374 — spans both sections
 
     # --- Element 3: Summary label (Rectangle 7) ---
     SUMMARY_LABEL_X = Grid.LABEL_COL_X
     SUMMARY_LABEL_Y = Grid.CONTENT_Y
-    SUMMARY_LABEL_W = Grid.LABEL_COL_W
+    SUMMARY_LABEL_W = 1542904
     SUMMARY_LABEL_H = Grid.SECTION_H
 
     # --- Element 4: Implications label (Rectangle 8) ---
     IMPLICATIONS_LABEL_X = Grid.LABEL_COL_X
     IMPLICATIONS_LABEL_Y = Grid.IMPL_Y
-    IMPLICATIONS_LABEL_W = Grid.LABEL_COL_W
+    IMPLICATIONS_LABEL_W = 1542905
     IMPLICATIONS_LABEL_H = Grid.SECTION_H
 
     # --- Element 9: Summary + Relevant Info text box (Rectangle 13) ---
-    SUMMARY_TEXT_X = Grid.TEXT_COL_X
-    SUMMARY_TEXT_Y = Grid.CONTENT_Y
-    SUMMARY_TEXT_W = Grid.TEXT_COL_W
+    SUMMARY_TEXT_X = 6628073
+    SUMMARY_TEXT_Y = 1266363
+    SUMMARY_TEXT_W = 5107887
     SUMMARY_TEXT_H = Grid.SECTION_H
     SUMMARY_FONT_SIZE = 1400     # 14pt default
     SUMMARY_FONT_MIN = 1000      # 10pt minimum fallback
     SUMMARY_MAX_WORDS = 120
 
     # --- Element 10: Implications text box (Rectangle 16) ---
-    IMPLICATIONS_TEXT_X = Grid.TEXT_COL_X
-    IMPLICATIONS_TEXT_Y = Grid.IMPL_Y
-    IMPLICATIONS_TEXT_W = Grid.TEXT_COL_W
+    IMPLICATIONS_TEXT_X = 6628074
+    IMPLICATIONS_TEXT_Y = 3601377
+    IMPLICATIONS_TEXT_W = 5107886
     IMPLICATIONS_TEXT_H = Grid.SECTION_H
     IMPLICATIONS_FONT_SIZE = 1400
     IMPLICATIONS_FONT_MIN = 1000
     IMPLICATIONS_MAX_WORDS = 110
 
-    # --- Source URL (ZoneTexte 4) ---
+    # --- Source URL / Footer (ZoneTexte 4) ---
     SOURCE_X = Grid.MARGIN_LEFT
-    SOURCE_Y = Grid.FOOTER_Y + Grid.FOOTER_H + Grid.SECTION_SPACING // 2  # 6485622
+    SOURCE_Y = 6532298
     SOURCE_W = Grid.CONTENT_WIDTH
-    SOURCE_H = 246221
+    SOURCE_H = 400110
     SOURCE_FONT_SIZE = 1000      # 10pt
 
     # --- Element 5: Credibility label (Rectangle 9) ---
@@ -207,10 +192,10 @@ class TemplateLayout:
     CRED_STAR3_X = CRED_STAR2_X + STAR_SIZE + STAR_GAP             # 7263516
     CRED_STARS_Y = Grid.FOOTER_Y + (Grid.FOOTER_H - STAR_SIZE) // 2  # 6027627
 
-    # --- Element 7: Relevance label (Rectangle 1) ---
+    # --- Element 7: Relevance label (Rectangle 3, id=4) ---
     _AFTER_CRED_STARS = CRED_STAR3_X + STAR_SIZE + Grid.GUTTER     # 7832034
-    RELEVANCE_LABEL_X = _AFTER_CRED_STARS
-    RELEVANCE_LABEL_Y = Grid.FOOTER_Y
+    RELEVANCE_LABEL_X = 7740594
+    RELEVANCE_LABEL_Y = 5939971
     RELEVANCE_LABEL_W = Grid.LABEL_COL_W
     RELEVANCE_LABEL_H = Grid.FOOTER_H
 
