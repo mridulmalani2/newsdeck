@@ -179,32 +179,30 @@ class TemplateLayout:
     SOURCE_FONT_SIZE = 1000      # 10pt
 
     # --- Element 5: Credibility label (Rectangle 9) ---
-    CREDIBILITY_LABEL_X = Grid.LABEL_COL_X
-    CREDIBILITY_LABEL_Y = Grid.FOOTER_Y
-    CREDIBILITY_LABEL_W = Grid.LABEL_COL_W
-    CREDIBILITY_LABEL_H = Grid.FOOTER_H
+    CREDIBILITY_LABEL_X = Grid.LABEL_COL_X              # 4846320
+    CREDIBILITY_LABEL_Y = 5946126
+    CREDIBILITY_LABEL_W = 1542904                        # 1.687" — widened to align right edge with labels above
+    CREDIBILITY_LABEL_H = Grid.FOOTER_H                  # 457200
 
     # --- Element 6: Credibility stars ---
     STAR_SIZE = 294198
     STAR_GAP = 91440            # 0.1" between stars
-    CRED_STAR1_X = Grid.TEXT_COL_X
-    CRED_STAR2_X = CRED_STAR1_X + STAR_SIZE + STAR_GAP             # 6877878
-    CRED_STAR3_X = CRED_STAR2_X + STAR_SIZE + STAR_GAP             # 7263516
-    CRED_STARS_Y = Grid.FOOTER_Y + (Grid.FOOTER_H - STAR_SIZE) // 2  # 6027627
+    CRED_STAR1_X = 6628073                               # matches template
+    CRED_STAR2_X = 7013711                               # matches template
+    CRED_STAR3_X = 7399349                               # matches template
+    CRED_STARS_Y = 6007011                               # matches template
 
     # --- Element 7: Relevance label (Rectangle 3, id=4) ---
-    _AFTER_CRED_STARS = CRED_STAR3_X + STAR_SIZE + Grid.GUTTER     # 7832034
-    RELEVANCE_LABEL_X = 7740594
-    RELEVANCE_LABEL_Y = 5939971
-    RELEVANCE_LABEL_W = Grid.LABEL_COL_W
-    RELEVANCE_LABEL_H = Grid.FOOTER_H
+    RELEVANCE_LABEL_X = 7876427                          # shifted right after wider credibility box
+    RELEVANCE_LABEL_Y = 5919355                          # matches template
+    RELEVANCE_LABEL_W = 1371600                          # 1.5"
+    RELEVANCE_LABEL_H = Grid.FOOTER_H                   # 457200
 
     # --- Element 8: Relevance stars ---
-    _REL_STAR_START = RELEVANCE_LABEL_X + RELEVANCE_LABEL_W + Grid.GUTTER // 2  # 9340794
-    REL_STAR1_X = _REL_STAR_START
-    REL_STAR2_X = _REL_STAR_START + STAR_SIZE + STAR_GAP           # 9726432
-    REL_STAR3_X = _REL_STAR_START + 2 * (STAR_SIZE + STAR_GAP)    # 10112070
-    REL_STARS_Y = CRED_STARS_Y                                      # same baseline
+    REL_STAR1_X = 9476627                                # matches template
+    REL_STAR2_X = 9862265                                # matches template
+    REL_STAR3_X = 10247903                               # matches template
+    REL_STARS_Y = 6007011                                # same baseline as cred stars
 
     # Star colors
     STAR_FILLED = "FFC000"   # Gold
