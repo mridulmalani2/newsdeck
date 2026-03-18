@@ -168,6 +168,10 @@ def _extract_properties(page: dict) -> Dict:
         elif name_lower in ("implications", "business implications", "impact"):
             result["implications"] = _get_rich_text(prop_data)
 
+        # Client feedback fields — internal to scraper, not for slides
+        elif name_lower in ("client rationale", "client relevance"):
+            pass
+
         # Evaluation notes — skip; this contains source assessment text
         # (credibility/relevancy judgments) that shouldn't appear on the slide.
         # Stars are driven by the numeric score columns instead.
