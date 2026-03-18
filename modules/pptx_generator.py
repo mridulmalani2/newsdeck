@@ -586,6 +586,61 @@ def _remove_pic_shape(slide, shape_name: str):
                 return
 
 
+def _expand_image_to_bounds(slide):
+    """Post-placement expansion: scale the image up to fill the available bounding box.
+
+    Only expands, never shrinks. Preserves aspect ratio. Centers within the box.
+    """
+    available_width = TL.IMG_BOX_RIGHT - TL.IMG_BOX_LEFT
+    available_height = TL.IMG_BOX_BOTTOM - TL.IMG_BOX_TOP
+
+    # Find the picture shape (shape_type 13 = Picture)
+    pic_shape = None
+    for shape in slide.shapes:
+        if shape.shape_type == 13:
+            pic_shape = shape
+            break
+
+    if pic_shape is None:
+        return
+
+    # Read current position and size via XML
+    spPr = pic_shape._element.find(qn("p:spPr"))
+    if spPr is None:
+        return
+    xfrm = spPr.find(qn("a:xfrm"))
+    if xfrm is None:
+        return
+    off = xfrm.find(qn("a:off"))
+    ext = xfrm.find(qn("a:ext"))
+    if off is None or ext is None:
+        return
+
+    current_width = int(ext.get("cx", 0))
+    current_height = int(ext.get("cy", 0))
+    if current_width == 0 or current_height == 0:
+        return
+
+    # Compute scale factor — only expand, never shrink
+    scale_w = available_width / current_width
+    scale_h = available_height / current_height
+    scale = min(scale_w, scale_h)
+
+    if scale <= 1.0:
+        return
+
+    new_width = int(current_width * scale)
+    new_height = int(current_height * scale)
+    new_left = TL.IMG_BOX_LEFT + int((available_width - new_width) / 2)
+    new_top = TL.IMG_BOX_TOP + int((available_height - new_height) / 2)
+
+    # Update position and size
+    off.set("x", str(new_left))
+    off.set("y", str(new_top))
+    ext.set("cx", str(new_width))
+    ext.set("cy", str(new_height))
+
+    logger.info(f"Expanded image: {current_width}x{current_height} → {new_width}x{new_height}")
 
 
 # ── Main generation ─────────────────────────────────────────────────────
@@ -637,6 +692,9 @@ def generate_slide(article: ArticleData, output_filename: str = None) -> Optiona
 
         # 7. Article image
         _replace_article_image(slide, article.article_image, prs)
+
+        # 8. Expand image to fill available space
+        _expand_image_to_bounds(slide)
 
         # Save
         if not output_filename:

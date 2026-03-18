@@ -210,6 +210,13 @@ class TemplateLayout:
     STAR_FILLED = "FFC000"   # Gold
     STAR_EMPTY = "FFFFFF"    # White
 
+    # Image expansion bounding box
+    _1CM = 360000
+    IMG_BOX_LEFT = _1CM
+    IMG_BOX_TOP = SUMMARY_TEXT_Y
+    IMG_BOX_RIGHT = SUMMARY_LABEL_X - _1CM
+    IMG_BOX_BOTTOM = CREDIBILITY_LABEL_Y + CREDIBILITY_LABEL_H
+
 
 # === Category-to-color mapping ===
 CATEGORY_COLORS = {
