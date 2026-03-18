@@ -38,8 +38,10 @@ from modules.pptx_generator import generate_slide_from_notion_data, ArticleData,
 from modules.selenium_capture import capture_article_images
 from modules.notion_client import (
     parse_webhook_payload, query_unprocessed_articles,
-    update_page_with_slide, fetch_page_data, mark_page_error
+    update_page_with_slide, fetch_page_data, mark_page_error,
+    update_page_comments
 )
+from modules.slide_validator import validate_article, format_comments
 from modules.utils import (
     generate_article_id, format_date, cleanup_cache,
     retry_with_backoff, get_file_url
@@ -122,7 +124,19 @@ async def process_article(article_data: dict) -> Optional[str]:
 
         logger.info(f"Step 3/4: Slide generated → {slide_path}")
 
-        # Step 4: Update Notion
+        # Step 4: Post-generation validation
+        logger.info("Step 3/4: Validating generated slide")
+        issues = validate_article(article_data, image_paths, slide_path)
+        if issues:
+            comments = format_comments(issues)
+            logger.warning(f"Validation found {len(issues)} issue(s):")
+            for issue in issues:
+                logger.warning(f"  → {issue}")
+        else:
+            comments = ""
+            logger.info("Validation passed — no issues found")
+
+        # Step 5: Update Notion (checkbox + comments)
         if page_id and NOTION_API_KEY:
             logger.info("Step 4/4: Updating Notion")
             success = update_page_with_slide(page_id, slide_path)
@@ -130,6 +144,9 @@ async def process_article(article_data: dict) -> Optional[str]:
                 logger.info("Notion updated successfully")
             else:
                 logger.warning("Notion update failed — slide still saved locally")
+
+            # Write validation comments to Notion
+            update_page_comments(page_id, comments)
         else:
             logger.info("Step 4/4: Skipping Notion update (no page_id or API key)")
 

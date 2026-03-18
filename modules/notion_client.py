@@ -362,18 +362,79 @@ def update_page_with_slide(page_id: str, slide_path: str) -> bool:
         return False
 
 
-def mark_page_error(page_id: str, error_msg: str) -> bool:
-    """Mark a page with an error status for manual review."""
-    try:
-        url = f"{NOTION_API_URL}/pages/{page_id}"
-        update_body = {
-            "properties": {
-                # If there's a status/notes field, update it
-                # Otherwise just leave slide_generated as false
+def update_page_comments(page_id: str, comments: str) -> bool:
+    """Write validation comments to the Notion 'Comments' column.
+
+    If the slide passed all checks, clears any previous comments.
+    If issues were found, writes them as a rich-text block.
+
+    Args:
+        page_id: Notion page ID
+        comments: Formatted comment string (empty = all clear)
+
+    Returns:
+        True if update succeeded
+    """
+    url = f"{NOTION_API_URL}/pages/{page_id}"
+
+    # Build rich_text content — empty list clears the field
+    if comments:
+        rich_text_content = [{"type": "text", "text": {"content": comments}}]
+    else:
+        rich_text_content = [{"type": "text", "text": {"content": "All checks passed"}}]
+
+    update_body = {
+        "properties": {
+            "Comments": {
+                "rich_text": rich_text_content
             }
         }
-        # Don't mark as generated - leave for retry
+    }
+
+    try:
+        response = httpx.patch(
+            url, headers=_get_headers(), json=update_body, timeout=30
+        )
+        response.raise_for_status()
+        if comments:
+            logger.info(f"Wrote validation comments for page {page_id}")
+        else:
+            logger.info(f"Cleared comments (all checks passed) for page {page_id}")
+        return True
+    except Exception as e:
+        # The Comments property might not exist yet — log but don't fail
+        logger.warning(
+            f"Could not update Comments for page {page_id}: {e}. "
+            "Ensure a 'Comments' rich_text property exists in the Notion database."
+        )
+        return False
+
+
+def mark_page_error(page_id: str, error_msg: str) -> bool:
+    """Mark a page with an error status for manual review.
+
+    Writes the error to the Comments column and leaves Slide Generated unchecked.
+    """
+    try:
+        url = f"{NOTION_API_URL}/pages/{page_id}"
+
+        # Try to write error to Comments column
+        update_body = {
+            "properties": {
+                "Comments": {
+                    "rich_text": [{
+                        "type": "text",
+                        "text": {"content": f"Pipeline error: {error_msg[:1900]}"}
+                    }]
+                }
+            }
+        }
+        response = httpx.patch(
+            url, headers=_get_headers(), json=update_body, timeout=30
+        )
+        response.raise_for_status()
         logger.warning(f"Marked page {page_id} for review: {error_msg}")
         return True
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Could not mark error for page {page_id}: {e}")
         return False

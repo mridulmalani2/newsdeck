@@ -9,6 +9,12 @@ Takes one full-page screenshot after dismissing cookie banners and inline ads,
 finds the headline position, then crops a single focused region covering the
 headline, byline, hero image and opening paragraph.
 
+Handles:
+- Cookie banner / GDPR consent popup dismissal (CSS + XPath text matching)
+- Cloudflare "Just a moment" / challenge page detection + wait
+- Post-capture validation (blank/single-color page detection)
+- Aggressive cleanup of ads, overlays, sticky headers, widgets
+
 Requirements:
     pip install selenium pillow
     Chrome browser installed (Selenium 4.6+ auto-manages ChromeDriver)
@@ -18,7 +24,7 @@ import asyncio
 import logging
 import time
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 
 from config import (
     BROWSER_HEADLESS, BROWSER_TIMEOUT,
@@ -59,6 +65,20 @@ COOKIE_SELECTORS = [
     '#didomi-notice-agree-button',
     '.fc-cta-consent',
     '.fc-button.fc-cta-consent',
+    # Complianz (WordPress plugin)
+    '.cmplz-btn.cmplz-accept',
+    '#cmplz-cookiebanner-container .cmplz-accept',
+    # Cookie Notice / Cookie Law Info (WordPress)
+    '#cookie_action_close_header',
+    '#cookie-law-info-bar .cli_action_button',
+    # GDPR Cookie Compliance
+    '#moove_gdpr_cookie_modal .mgbutton',
+    # Termly
+    '[data-tid="banner-accept"]',
+    # Iubenda
+    '.iubenda-cs-accept-btn',
+    # Osano
+    '.osano-cm-accept-all',
     # Generic consent buttons
     'button[id*="cookie"][id*="accept"]',
     'button[class*="cookie"][class*="accept"]',
@@ -72,13 +92,22 @@ COOKIE_SELECTORS = [
     '[class*="banner"] [class*="close"]',
     '[aria-label*="cookie"] button',
     '[aria-label*="consent"] button',
+    # Catch-all: any fixed/sticky overlay with accept/agree buttons
+    '[role="dialog"] button[class*="accept"]',
+    '[role="dialog"] button[class*="agree"]',
+    '[role="alertdialog"] button',
 ]
 
 # Text labels used for XPath-based button matching
 COOKIE_BUTTON_TEXTS = [
     "Accept All", "Accept all", "Accept Cookies", "Accept cookies",
     "Accept", "I agree", "I Agree", "Agree", "OK", "Got it",
-    "Allow", "Allow All", "Continue",
+    "Allow", "Allow All", "Allow all", "Continue",
+    "Accept & Close", "Accept and close", "Agree and close",
+    "Close", "Dismiss", "No thanks",
+    "Accept All Cookies", "Accept all cookies",
+    "Consent", "Yes, I agree", "I Accept",
+    "Alle akzeptieren", "Tout accepter",  # German / French common
 ]
 
 # ---------------------------------------------------------------------------
@@ -245,6 +274,60 @@ PAGE_HEIGHT_JS = """
     );
 """
 
+# ---------------------------------------------------------------------------
+# Cloudflare / bot-protection detection
+# ---------------------------------------------------------------------------
+
+CLOUDFLARE_DETECT_JS = """
+    // Check for common Cloudflare challenge indicators
+    const title = document.title.toLowerCase();
+    const bodyText = (document.body && document.body.innerText || '').toLowerCase();
+
+    const cfIndicators = [
+        title.includes('just a moment'),
+        title.includes('attention required'),
+        title.includes('security check'),
+        title.includes('please wait'),
+        title.includes('checking your browser'),
+        title.includes('access denied'),
+        document.querySelector('#challenge-running') !== null,
+        document.querySelector('#challenge-form') !== null,
+        document.querySelector('.cf-browser-verification') !== null,
+        document.querySelector('#cf-challenge-running') !== null,
+        document.querySelector('[class*="challenge"]') !== null,
+        document.querySelector('.ray-id') !== null,
+        document.querySelector('#turnstile-wrapper') !== null,
+        bodyText.includes('checking if the site connection is secure'),
+        bodyText.includes('enable javascript and cookies'),
+        bodyText.includes('ray id'),
+        bodyText.includes('performance & security by cloudflare'),
+    ];
+
+    const triggered = cfIndicators.filter(Boolean).length;
+    return {
+        isChallenge: triggered >= 2,
+        indicators: triggered,
+        title: document.title,
+    };
+"""
+
+POST_CAPTURE_VALIDATE_JS = """
+    // Quick sanity check: does the page look like an actual article?
+    const h1 = document.querySelector('h1');
+    const article = document.querySelector('article') ||
+                    document.querySelector('[class*="article"]') ||
+                    document.querySelector('main');
+    const paragraphs = document.querySelectorAll('p');
+
+    return {
+        hasH1: !!h1,
+        hasArticle: !!article,
+        paragraphCount: paragraphs.length,
+        bodyLength: (document.body && document.body.innerText || '').length,
+        title: document.title,
+    };
+"""
+
 
 # ---------------------------------------------------------------------------
 # Driver setup
@@ -256,6 +339,9 @@ def _build_driver() -> webdriver.Chrome:
     Uses --force-device-scale-factor=1 to guarantee 1:1 pixel mapping
     in screenshots (no DPR scaling).  Selenium 4.6+ auto-manages
     ChromeDriver via its built-in SeleniumManager.
+
+    Includes a realistic user-agent to reduce bot-detection triggers
+    (Cloudflare, cookie walls that block headless Chrome).
     """
     options = Options()
 
@@ -269,9 +355,25 @@ def _build_driver() -> webdriver.Chrome:
     options.add_argument("--disable-gpu")
     options.add_argument("--disable-extensions")
     options.add_argument("--disable-infobars")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument(
+        "--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    )
+
+    # Suppress "Chrome is being controlled by automated software" bar
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option("useAutomationExtension", False)
 
     driver = webdriver.Chrome(options=options)
     driver.set_page_load_timeout(BROWSER_TIMEOUT / 1000)  # config is in ms
+
+    # Remove navigator.webdriver flag to avoid bot detection
+    driver.execute_cdp_cmd(
+        "Page.addScriptToEvaluateOnNewDocument",
+        {"source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"},
+    )
+
     return driver
 
 
@@ -413,10 +515,71 @@ def _crop_article_top(full_page_path: str, output_dir: Path,
 # Main capture (synchronous — Selenium is inherently sync)
 # ---------------------------------------------------------------------------
 
+def _wait_for_cloudflare(driver: webdriver.Chrome, max_wait: int = 15) -> bool:
+    """Wait for Cloudflare challenge to resolve.
+
+    Returns True if the page loaded successfully (no challenge detected),
+    False if still stuck on a challenge page after max_wait seconds.
+    """
+    for attempt in range(max_wait):
+        cf_result = driver.execute_script(CLOUDFLARE_DETECT_JS)
+        if not cf_result or not cf_result.get("isChallenge", False):
+            if attempt > 0:
+                logger.info(
+                    f"Cloudflare challenge resolved after {attempt}s"
+                )
+            return True
+        if attempt == 0:
+            logger.info("Cloudflare challenge detected — waiting for resolution...")
+        time.sleep(1)
+
+    logger.warning(
+        f"Cloudflare challenge did not resolve within {max_wait}s"
+    )
+    return False
+
+
+def _post_capture_check(driver: webdriver.Chrome) -> List[str]:
+    """Run post-capture validation to detect bad captures.
+
+    Returns a list of warning strings (empty = looks good).
+    """
+    warnings = []
+    try:
+        result = driver.execute_script(POST_CAPTURE_VALIDATE_JS)
+        if not result:
+            return warnings
+
+        # Very short body text = likely error/challenge page
+        body_len = result.get("bodyLength", 0)
+        if body_len < 200:
+            warnings.append(
+                f"Page body is very short ({body_len} chars) — "
+                "may not be actual article content"
+            )
+
+        # No h1 on the page
+        if not result.get("hasH1", False):
+            warnings.append("No <h1> element found on page")
+
+        # Very few paragraphs
+        p_count = result.get("paragraphCount", 0)
+        if p_count < 2:
+            warnings.append(
+                f"Only {p_count} paragraph(s) found — "
+                "page may not have loaded correctly"
+            )
+
+    except Exception as e:
+        logger.warning(f"Post-capture check failed: {e}")
+
+    return warnings
+
+
 def _capture_sync(article_url: str,
                   article_id: str = "default") -> Dict[str, Optional[str]]:
-    """Full capture pipeline: navigate → dismiss popups → clean page →
-    screenshot → crop article top.
+    """Full capture pipeline: navigate → wait for Cloudflare → dismiss
+    cookie popups → clean page → validate → screenshot → crop.
     """
     output_dir = CACHE_DIR / article_id
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -438,7 +601,14 @@ def _capture_sync(article_url: str,
         driver.get(article_url)
         time.sleep(2)  # wait for JS-rendered content
 
-        # Dismiss cookie banners
+        # Check for Cloudflare / bot protection challenge and wait
+        cf_clear = _wait_for_cloudflare(driver, max_wait=15)
+        if not cf_clear:
+            logger.warning(
+                "Cloudflare challenge not resolved — attempting capture anyway"
+            )
+
+        # Dismiss cookie banners (first round)
         _dismiss_popups(driver)
         time.sleep(1)
 
@@ -447,11 +617,30 @@ def _capture_sync(article_url: str,
         if removed and removed > 0:
             logger.info(f"Cleaned up {removed} overlay/ad/widget elements")
             time.sleep(1)
-            # Second pass — some elements reappear after first removal
-            removed2 = driver.execute_script(CLEANUP_JS)
-            if removed2 and removed2 > 0:
-                logger.info(f"Second cleanup pass removed {removed2} more elements")
-                time.sleep(0.5)
+
+        # Second dismiss attempt — some banners appear after JS loads
+        _dismiss_popups(driver)
+        time.sleep(0.5)
+
+        # Second cleanup pass — some elements reappear after first removal
+        removed2 = driver.execute_script(CLEANUP_JS)
+        if removed2 and removed2 > 0:
+            logger.info(f"Second cleanup pass removed {removed2} more elements")
+            time.sleep(0.5)
+
+        # Scroll down and back to trigger lazy-loaded content
+        driver.execute_script("window.scrollTo(0, 500);")
+        time.sleep(0.5)
+        driver.execute_script("window.scrollTo(0, 0);")
+        time.sleep(0.5)
+
+        # Final cleanup for anything that appeared after scroll
+        driver.execute_script(CLEANUP_JS)
+
+        # Post-capture validation
+        capture_warnings = _post_capture_check(driver)
+        for w in capture_warnings:
+            logger.warning(f"Capture check: {w}")
 
         # Find the headline's document-relative Y position
         headline_info = driver.execute_script(FIND_HEADLINE_JS)
