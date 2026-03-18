@@ -176,7 +176,7 @@ async def health_check():
     checks = {
         "server": "ok",
         "notion_configured": bool(NOTION_API_KEY and NOTION_DATABASE_ID),
-        "template_exists": Path("templates/Project_F_Update_20250429-FinalVersion.pptx").exists(),
+        "template_exists": Path("templates/slide_template.pptx").exists(),
         "slides_dir_writable": os.access(str(SLIDES_DIR), os.W_OK),
         "logs_dir_writable": os.access(str(LOGS_DIR), os.W_OK),
     }

@@ -64,21 +64,24 @@ curl -X POST http://localhost:8000/process \
 
 ## Notion Database Setup
 
+See **[NOTION_INPUT_GUIDE.md](NOTION_INPUT_GUIDE.md)** for detailed field constraints, word limits, and formatting rules.
+
 ### Required Fields
 
-| Field | Type | Notes |
-|-------|------|-------|
-| Name/Title | Title | Article headline |
-| Summary | Rich Text | Summary bullets (newline-separated) |
-| Implications | Rich Text | First line = main point, rest = sub-bullets |
-| Category/Primary Theme | Select | REGULATIONS, M&A, COMPETITIVE MOVE, etc. |
-| Article URL | URL | Source article link |
-| Source | Rich Text or Select | Publication name |
-| Credibility | Number | 0-5 scale |
-| Relevancy | Number | 0-5 scale |
-| Publication Date | Date | Article date |
-| Slide Generated | Checkbox | Auto-set by system |
-| Slide Link | URL | Auto-set by system (file:// path) |
+| Field | Type | Limit | Notes |
+|-------|------|-------|-------|
+| Name/Title | Title | 90 chars | Article headline |
+| Summary | Rich Text | 120 words | Plain text; use `- ` prefix for bullets |
+| Relevant Info | Rich Text | (shared with Summary) | Flows into same text box |
+| Implications | Rich Text | 110 words | Line 1 = main point, rest = sub-bullets |
+| Category | Select | 25 chars | REGULATIONS, M&A, GENERAL INNOVATION, etc. |
+| Article URL | URL | — | Source article link |
+| Source | Rich Text or Select | — | Publication name |
+| Credibility | Number | 0-5 | Maps to 3-star rating |
+| Relevance | Number | 0-5 | Maps to 3-star rating |
+| Publication Date | Date | DD/MM/YYYY | Article date |
+| Slide Generated | Checkbox | — | Auto-set by system |
+| Slide Link | URL | — | Auto-set by system |
 
 ### Webhook Setup
 
@@ -115,7 +118,7 @@ automation-system/
 │   ├── notion_client.py      # Notion API integration
 │   └── utils.py              # Helper functions
 ├── templates/
-│   └── Project_F_Update_20250429-FinalVersion.pptx
+│   └── slide_template.pptx          # Converted from .potx template
 ├── slides/                    # Generated slides output
 ├── logs/                      # Processing logs
 ├── cache/                     # Temporary image cache
