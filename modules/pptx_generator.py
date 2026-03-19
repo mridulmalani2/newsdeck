@@ -749,3 +749,113 @@ def generate_slide_from_notion_data(notion_data: dict,
     )
 
     return generate_slide(article)
+
+
+# ── Screenshot backup slide ───────────────────────────────────────────────
+
+async def add_screenshot_slide(slide_path: str, article_url: str) -> Optional[str]:
+    """Add a second blank slide with a full-page desktop screenshot of the article.
+
+    Opens the existing presentation, captures a full-page screenshot using
+    Playwright in desktop mode (1920x1080), and appends it as Slide 2.
+
+    Args:
+        slide_path: Path to the existing .pptx file to append to.
+        article_url: URL of the article to screenshot.
+
+    Returns:
+        Path to the saved screenshot image, or None on failure.
+    """
+    from playwright.async_api import async_playwright
+    from config import BROWSER_HEADLESS, BROWSER_TIMEOUT, SLIDES_DIR
+
+    screenshot_path = SLIDES_DIR / f"screenshot_{Path(slide_path).stem}.png"
+
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=BROWSER_HEADLESS)
+            context = await browser.new_context(
+                viewport={"width": 1920, "height": 1080},
+            )
+            page = await context.new_page()
+
+            logger.info(f"Screenshot slide: navigating to {article_url} (desktop 1920x1080)")
+            await page.goto(article_url, wait_until="networkidle",
+                            timeout=BROWSER_TIMEOUT)
+            await page.wait_for_timeout(2000)
+
+            # Dismiss cookie banners using common selectors
+            cookie_selectors = [
+                '#onetrust-accept-btn-handler',
+                '#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll',
+                '#CybotCookiebotDialogBodyButtonAccept',
+                '#didomi-notice-agree-button',
+                '.fc-cta-consent',
+                'button:has-text("Accept All")',
+                'button:has-text("Accept all")',
+                'button:has-text("Accept Cookies")',
+                'button:has-text("Accept")',
+                'button:has-text("I agree")',
+                'button:has-text("Agree")',
+                'button:has-text("OK")',
+                'button:has-text("Got it")',
+                'button:has-text("Allow")',
+            ]
+            for selector in cookie_selectors:
+                try:
+                    btn = page.locator(selector).first
+                    if await btn.is_visible(timeout=500):
+                        await btn.click(timeout=1000)
+                        await page.wait_for_timeout(500)
+                        break
+                except Exception:
+                    continue
+
+            # Capture full-page screenshot
+            await page.screenshot(path=str(screenshot_path), full_page=True)
+            logger.info(f"Screenshot saved: {screenshot_path}")
+
+            await browser.close()
+
+        # Open existing presentation and add Slide 2
+        prs = Presentation(slide_path)
+        blank_layout = prs.slide_layouts[15]  # "Dark Slide" — 0 placeholders, truly blank
+        slide = prs.slides.add_slide(blank_layout)
+
+        # Calculate image dimensions to fill slide proportionally
+        from PIL import Image
+        with Image.open(str(screenshot_path)) as img:
+            img_w, img_h = img.size
+
+        slide_w = TL.SLIDE_WIDTH  # EMUs
+        slide_h = TL.SLIDE_HEIGHT
+
+        # Scale to fill slide width, then check height
+        scale = slide_w / img_w
+        scaled_h = int(img_h * scale)
+
+        if scaled_h > slide_h:
+            # Too tall — scale to fit height instead
+            scale = slide_h / img_h
+            final_w = int(img_w * scale)
+            final_h = slide_h
+            left = (slide_w - final_w) // 2
+            top = 0
+        else:
+            # Fits — center vertically
+            final_w = slide_w
+            final_h = scaled_h
+            left = 0
+            top = (slide_h - final_h) // 2
+
+        slide.shapes.add_picture(
+            str(screenshot_path), left, top, final_w, final_h
+        )
+
+        prs.save(slide_path)
+        logger.info(f"Screenshot slide added to {slide_path}")
+        return str(screenshot_path)
+
+    except Exception as e:
+        logger.error(f"Failed to add screenshot slide: {e}", exc_info=True)
+        return None

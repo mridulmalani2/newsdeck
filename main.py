@@ -34,7 +34,7 @@ from config import (
     WEBHOOK_PORT, WEBHOOK_SECRET, ENVIRONMENT,
     SLIDES_DIR, LOGS_DIR, NOTION_API_KEY, NOTION_DATABASE_ID
 )
-from modules.pptx_generator import generate_slide_from_notion_data, ArticleData, generate_slide
+from modules.pptx_generator import generate_slide_from_notion_data, ArticleData, generate_slide, add_screenshot_slide
 from modules.selenium_capture import capture_article_images
 from modules.notion_client import (
     parse_webhook_payload, query_unprocessed_articles,
@@ -123,6 +123,11 @@ async def process_article(article_data: dict) -> Optional[str]:
             raise Exception("Slide generation returned None")
 
         logger.info(f"Step 3/4: Slide generated → {slide_path}")
+
+        # Step 3b: Add backup screenshot slide (Slide 2)
+        if article_url:
+            logger.info("Adding full-page screenshot as Slide 2")
+            await add_screenshot_slide(slide_path, article_url)
 
         # Step 4: Post-generation validation
         logger.info("Step 3/4: Validating generated slide")
