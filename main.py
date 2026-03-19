@@ -124,9 +124,9 @@ async def process_article(article_data: dict) -> Optional[str]:
 
         logger.info(f"Step 3/4: Slide generated → {slide_path}")
 
-        # Step 3b: Add backup screenshot slide (Slide 2)
+        # Step 3b: Add backup screenshot slides (Slide 2: viewport, Slide 3: full-page)
         if article_url:
-            logger.info("Adding full-page screenshot as Slide 2")
+            logger.info("Adding backup screenshot slides (Slide 2: viewport, Slide 3: full-page)")
             await add_screenshot_slide(slide_path, article_url)
 
         # Step 4: Post-generation validation
