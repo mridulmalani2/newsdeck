@@ -754,10 +754,11 @@ def generate_slide_from_notion_data(notion_data: dict,
 # ── Screenshot backup slide ───────────────────────────────────────────────
 
 async def add_screenshot_slide(slide_path: str, article_url: str) -> Optional[str]:
-    """Add a second blank slide with a full-page desktop screenshot of the article.
+    """Add a second blank slide with a viewport-only desktop screenshot of the article.
 
-    Opens the existing presentation, captures a full-page screenshot using
-    Playwright in desktop mode (1920x1080), and appends it as Slide 2.
+    Opens the existing presentation, captures the visible viewport using
+    Playwright in laptop mode (1920x1080 — 16:9, matching the slide aspect
+    ratio), and appends it as Slide 2.
 
     Args:
         slide_path: Path to the existing .pptx file to append to.
@@ -811,8 +812,8 @@ async def add_screenshot_slide(slide_path: str, article_url: str) -> Optional[st
                 except Exception:
                     continue
 
-            # Capture full-page screenshot
-            await page.screenshot(path=str(screenshot_path), full_page=True)
+            # Capture viewport-only screenshot (horizontal laptop view, 1920x1080)
+            await page.screenshot(path=str(screenshot_path), full_page=False)
             logger.info(f"Screenshot saved: {screenshot_path}")
 
             await browser.close()
