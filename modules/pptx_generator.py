@@ -753,24 +753,24 @@ def generate_slide_from_notion_data(notion_data: dict,
 
 # ── Screenshot backup slide ───────────────────────────────────────────────
 
-async def add_screenshot_slide(slide_path: str, article_url: str) -> Optional[str]:
+async def add_screenshot_slide(slide_path: str, article_url: str) -> bool:
     """Add a second blank slide with a viewport-only desktop screenshot of the article.
 
     Opens the existing presentation, captures the visible viewport using
     Playwright in laptop mode (1920x1080 — 16:9, matching the slide aspect
-    ratio), and appends it as Slide 2.
+    ratio), and appends it as Slide 2.  The screenshot is kept in memory
+    only — no image file is written to disk.
 
     Args:
         slide_path: Path to the existing .pptx file to append to.
         article_url: URL of the article to screenshot.
 
     Returns:
-        Path to the saved screenshot image, or None on failure.
+        True on success, False on failure.
     """
+    from io import BytesIO
     from playwright.async_api import async_playwright
-    from config import BROWSER_HEADLESS, BROWSER_TIMEOUT, SLIDES_DIR
-
-    screenshot_path = SLIDES_DIR / f"screenshot_{Path(slide_path).stem}.png"
+    from config import BROWSER_HEADLESS, BROWSER_TIMEOUT
 
     try:
         async with async_playwright() as p:
@@ -812,9 +812,9 @@ async def add_screenshot_slide(slide_path: str, article_url: str) -> Optional[st
                 except Exception:
                     continue
 
-            # Capture viewport-only screenshot (horizontal laptop view, 1920x1080)
-            await page.screenshot(path=str(screenshot_path), full_page=False)
-            logger.info(f"Screenshot saved: {screenshot_path}")
+            # Capture viewport-only screenshot into memory (no file saved)
+            screenshot_bytes = await page.screenshot(full_page=False)
+            logger.info("Screenshot captured in memory (1920x1080 viewport)")
 
             await browser.close()
 
@@ -823,40 +823,15 @@ async def add_screenshot_slide(slide_path: str, article_url: str) -> Optional[st
         blank_layout = prs.slide_layouts[15]  # "Dark Slide" — 0 placeholders, truly blank
         slide = prs.slides.add_slide(blank_layout)
 
-        # Calculate image dimensions to fill slide proportionally
-        from PIL import Image
-        with Image.open(str(screenshot_path)) as img:
-            img_w, img_h = img.size
-
-        slide_w = TL.SLIDE_WIDTH  # EMUs
-        slide_h = TL.SLIDE_HEIGHT
-
-        # Scale to fill slide width, then check height
-        scale = slide_w / img_w
-        scaled_h = int(img_h * scale)
-
-        if scaled_h > slide_h:
-            # Too tall — scale to fit height instead
-            scale = slide_h / img_h
-            final_w = int(img_w * scale)
-            final_h = slide_h
-            left = (slide_w - final_w) // 2
-            top = 0
-        else:
-            # Fits — center vertically
-            final_w = slide_w
-            final_h = scaled_h
-            left = 0
-            top = (slide_h - final_h) // 2
-
+        # 1920x1080 viewport = 16:9 = same as slide, so fill edge-to-edge
         slide.shapes.add_picture(
-            str(screenshot_path), left, top, final_w, final_h
+            BytesIO(screenshot_bytes), 0, 0, TL.SLIDE_WIDTH, TL.SLIDE_HEIGHT
         )
 
         prs.save(slide_path)
         logger.info(f"Screenshot slide added to {slide_path}")
-        return str(screenshot_path)
+        return True
 
     except Exception as e:
         logger.error(f"Failed to add screenshot slide: {e}", exc_info=True)
-        return None
+        return False
