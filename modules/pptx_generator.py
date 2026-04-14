@@ -770,6 +770,7 @@ def generate_slide_from_notion_data(notion_data: dict,
     # Parse implications: first line = main point, rest = sub-bullets
     impl_raw = notion_data.get("implications", "")
     impl_lines = [l.strip() for l in impl_raw.split("\n") if l.strip()]
+    impl_lines = [l[1:].lstrip() if l.startswith('-') else l for l in impl_lines]
     main_impl = impl_lines[0] if impl_lines else impl_raw
     sub_impl = impl_lines[1:] if len(impl_lines) > 1 else []
 
