@@ -679,10 +679,9 @@ def generate_slide(article: ArticleData, output_filename: str = None) -> Optiona
         # 3. Summary + Relevant Info (Element 9)
         _update_summary(slide, article.summary, article.relevant_info)
 
-        # 4. Implications (Element 10)
-        if article.implications and article.implications.strip():
-            _update_implications(slide, article.implications,
-                                 article.implications_sub or [])
+        # 4. Implications (Element 10) — always called so template placeholder is cleared
+        _update_implications(slide, article.implications or "",
+                             article.implications_sub or [])
 
         # 5. Footer (Source + Date in ZoneTexte 4)
         _update_footer(slide, article.source_url, _format_date(article.publication_date))
