@@ -199,15 +199,9 @@ def _extract_properties(page: dict) -> Dict:
         elif "relevant" in name_lower or "additional" in name_lower:
             result["relevant_info"] = _get_rich_text(prop_data)
 
-        # Implications — column is named "Implications" in current DB
-        elif name_lower in ("implications", "client relevance", "business implications", "impact"):
-            text = _get_any_text(prop_data)
-            if text:  # never overwrite a good value with an empty one
-                result["implications"] = text
-            logger.info(
-                f"Matched implications column '{prop_name}' (type={prop_type}) → "
-                f"{len(text)} chars"
-            )
+        # Implications — drawn from the "Implications" column only
+        elif name_lower == "implications":
+            result["implications"] = _get_rich_text(prop_data)
 
         # Client feedback fields — internal to scraper, not for slides
         elif name_lower in ("client rationale",):
