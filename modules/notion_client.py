@@ -102,6 +102,35 @@ def _extract_properties(page: dict) -> Dict:
         rt_items = prop_data.get("rich_text", [])
         return "".join(t.get("plain_text", "") for t in rt_items)
 
+    def _get_any_text(prop_data):
+        """Extract text from any Notion property type that can hold text.
+        Handles rich_text, title, formula (string), and rollup (array of text)."""
+        p_type = prop_data.get("type", "")
+        if p_type == "rich_text":
+            return _get_rich_text(prop_data)
+        if p_type == "title":
+            return _get_title(prop_data)
+        if p_type == "formula":
+            formula = prop_data.get("formula", {}) or {}
+            f_type = formula.get("type", "")
+            if f_type == "string":
+                return formula.get("string", "") or ""
+            if f_type == "number":
+                n = formula.get("number")
+                return str(n) if n is not None else ""
+        if p_type == "rollup":
+            rollup = prop_data.get("rollup", {}) or {}
+            if rollup.get("type") == "array":
+                parts = []
+                for item in rollup.get("array", []):
+                    sub_type = item.get("type", "")
+                    if sub_type == "rich_text":
+                        parts.append("".join(t.get("plain_text", "") for t in item.get("rich_text", [])))
+                    elif sub_type == "title":
+                        parts.append("".join(t.get("plain_text", "") for t in item.get("title", [])))
+                return " ".join(p for p in parts if p)
+        return ""
+
     def _get_url(prop_data):
         return prop_data.get("url", "")
 
@@ -148,6 +177,12 @@ def _extract_properties(page: dict) -> Dict:
         "slide_generated": False,
     }
 
+    # Diagnostic: log all Notion columns and their types so mismatches are visible
+    logger.info(
+        f"Notion page {page_id[:8]} columns: "
+        + ", ".join(f"{n!r}({p.get('type', '?')})" for n, p in props.items())
+    )
+
     for prop_name, prop_data in props.items():
         prop_type = prop_data.get("type", "")
         name_lower = prop_name.lower().strip()
@@ -164,8 +199,8 @@ def _extract_properties(page: dict) -> Dict:
         elif "relevant" in name_lower or "additional" in name_lower:
             result["relevant_info"] = _get_rich_text(prop_data)
 
-        # Implications — sourced from "Client Relevance" (text) column
-        elif name_lower in ("client relevance", "implications", "business implications", "impact"):
+        # Implications — drawn from the "Implications" column only
+        elif name_lower == "implications":
             result["implications"] = _get_rich_text(prop_data)
 
         # Client feedback fields — internal to scraper, not for slides
