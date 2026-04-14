@@ -165,15 +165,43 @@ def _choose_font_size(text: str, default_size: int = 1400, min_size: int = 1000)
 
 # ── XML builders ────────────────────────────────────────────────────────
 
-def _enable_autofit(bodyPr):
-    """Enable normAutofit on bodyPr so PowerPoint auto-shrinks text."""
+def _enable_autofit(bodyPr, word_count: int = 0, capacity: int = 0):
+    """Enable normAutofit on bodyPr so PowerPoint auto-shrinks text.
+
+    PowerPoint only applies normAutofit shrink at file-open time when
+    ``fontScale`` is set explicitly. Without it, the scale stays at 100%
+    until the user manually edits the text. This function pre-computes
+    ``fontScale`` based on how much the text overflows its expected capacity.
+
+    Args:
+        bodyPr: The <a:bodyPr> element on the shape.
+        word_count: Actual word count of the text being written.
+        capacity: Nominal word capacity at the chosen font size.
+    """
     if bodyPr is None:
         return
+
+    # Remove any existing autofit elements at any nesting depth
     autofit_tags = {qn(t) for t in ("a:noAutofit", "a:normAutofit", "a:spAutoFit")}
     for el in list(bodyPr.iter()):
         if el.tag in autofit_tags and el is not bodyPr:
             el.getparent().remove(el)
-    bodyPr.insert(0, etree.Element(qn("a:normAutofit")))
+
+    autofit = etree.Element(qn("a:normAutofit"))
+
+    # Pre-compute fontScale when overflow is likely.
+    # Use a tighter effective capacity (80% of nominal) as a safety margin,
+    # since word-count-based estimates can be optimistic.
+    if word_count > 0 and capacity > 0:
+        effective_capacity = capacity * 0.8
+        if word_count > effective_capacity:
+            scale = int(100000 * (effective_capacity / word_count))
+            scale = max(scale, 62500)              # PowerPoint minimum = 62.5%
+            scale = (scale // 2500) * 2500         # PowerPoint steps in 2.5%
+            autofit.set("fontScale", str(scale))
+            autofit.set("lnSpcReduction", "20000")  # 20% line spacing reduction
+
+    bodyPr.insert(0, autofit)
 
 
 def _make_run(text: str, font_size: int, lang: str = "en-US",
@@ -264,6 +292,7 @@ def _update_title(slide, title: str):
 
     txBody = shape._element.find(qn("p:txBody"))
     bodyPr = txBody.find(qn("a:bodyPr"))
+    # Title is short; autofit without pre-computed fontScale is fine
     _enable_autofit(bodyPr)
 
     # Replace text in existing paragraph structure to preserve formatting
@@ -318,7 +347,6 @@ def _update_summary(slide, summary: str, relevant_info: str):
         return
 
     bodyPr = txBody.find(qn("a:bodyPr"))
-    _enable_autofit(bodyPr)
 
     # Remove existing paragraphs
     for p in txBody.findall(qn("a:p")):
@@ -329,6 +357,11 @@ def _update_summary(slide, summary: str, relevant_info: str):
     if relevant_info and relevant_info.strip() and not _is_error_text(relevant_info):
         all_text += " " + relevant_info
     font_size = _choose_font_size(all_text, TL.SUMMARY_FONT_SIZE, TL.SUMMARY_FONT_MIN)
+    _enable_autofit(
+        bodyPr,
+        word_count=_word_count(all_text),
+        capacity=_FONT_CAPACITY.get(font_size, 120),
+    )
 
     # Build summary paragraphs
     summary_lines = [l.strip() for l in summary.split("\n") if l.strip()]
@@ -376,7 +409,6 @@ def _update_implications(slide, main_point: str, sub_points: list):
         return
 
     bodyPr = txBody.find(qn("a:bodyPr"))
-    _enable_autofit(bodyPr)
 
     # Remove existing paragraphs
     for p in txBody.findall(qn("a:p")):
@@ -385,6 +417,11 @@ def _update_implications(slide, main_point: str, sub_points: list):
     # Calculate font size from total text
     all_text = main_point + " " + " ".join(sub_points)
     font_size = _choose_font_size(all_text, TL.IMPLICATIONS_FONT_SIZE, TL.IMPLICATIONS_FONT_MIN)
+    _enable_autofit(
+        bodyPr,
+        word_count=_word_count(all_text),
+        capacity=_FONT_CAPACITY.get(font_size, 120),
+    )
 
     # Main point — plain paragraph (no bullet)
     txBody.append(_make_paragraph(main_point, font_size, lang="en-GB", space_before=400))
