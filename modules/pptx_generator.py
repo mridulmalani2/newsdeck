@@ -416,9 +416,18 @@ def _update_implications(slide, main_point: str, sub_points: list):
     for p in txBody.findall(qn("a:p")):
         txBody.remove(p)
 
-    # Calculate font size from total text
+    # Calculate font size from total text.
+    # Unlike prose, bullet sub-points each occupy their own line regardless of
+    # length, plus carry 6pt spcBef spacing before them. Raw character count
+    # alone therefore underestimates the vertical space required. We add a
+    # per-sub-point overhead (≈1.5 visual lines at typical font sizes) so the
+    # font-size picker accounts for the line-break and spacing overhead of the
+    # bulleted structure. The real text (without padding) is still passed to
+    # _enable_autofit so PowerPoint's fontScale hint remains accurate.
     all_text = main_point + " " + " ".join(sub_points)
-    font_size = _choose_font_size(all_text, TL.IMPLICATIONS_FONT_SIZE, TL.IMPLICATIONS_FONT_MIN)
+    _BULLET_OVERHEAD_CHARS = 130  # ~1.5 visual lines × ~90 chars/line at 10pt
+    sizing_text = all_text.strip() + ("x" * (len(sub_points) * _BULLET_OVERHEAD_CHARS))
+    font_size = _choose_font_size(sizing_text, TL.IMPLICATIONS_FONT_SIZE, TL.IMPLICATIONS_FONT_MIN)
     _enable_autofit(bodyPr, text=all_text, capacity=_CHAR_CAPACITY.get(font_size, 620))
 
     # Main point — plain paragraph (no bullet)
