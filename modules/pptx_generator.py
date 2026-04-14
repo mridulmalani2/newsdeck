@@ -107,9 +107,6 @@ def _format_date(date_str: str) -> str:
     return date_str
 
 
-def _word_count(text: str) -> int:
-    return len(text.split())
-
 
 def _find_shape_by_name(slide, name: str):
     for shape in slide.shapes:
@@ -137,46 +134,54 @@ def score_to_stars(score: float, max_stars: int = 3) -> int:
 
 # ── Font size fallback ──────────────────────────────────────────────────
 
-# Approximate character capacity for the content boxes at each font size.
-# Box inner area: ~5.82" wide × 2.37" high.
-_FONT_CAPACITY = {
-    1400: 120,   # 14pt — ~120 words
-    1200: 160,   # 12pt — ~160 words
-    1100: 185,   # 11pt — ~185 words
-    1000: 220,   # 10pt — ~220 words
+# Character capacity for the content boxes (Rectangle 13 & 16) at each font size.
+# Box inner area: ~5.58" wide × 2.37" high (5107887 × 2168391 EMUs).
+# Derived from: lines_per_box × avg_chars_per_line at each pt size.
+#   14pt → line-height ~0.233" → ~10 lines × ~62 chars  = 620
+#   12pt → line-height ~0.200" → ~11 lines × ~75 chars  = 825
+#   11pt → line-height ~0.183" → ~12 lines × ~82 chars  = 984
+#   10pt → line-height ~0.167" → ~14 lines × ~90 chars  = 1260
+_CHAR_CAPACITY = {
+    1400: 620,
+    1200: 825,
+    1100: 984,
+    1000: 1260,
 }
 
 
 def _choose_font_size(text: str, default_size: int = 1400, min_size: int = 1000) -> int:
-    """Pick the largest font size that fits the text within the box.
+    """Pick the largest font size where the text fits within the content box.
 
-    Uses word count as a proxy. Returns font size in hundredths of a point.
+    Uses character count as the sizing signal — more accurate than word count
+    since it accounts for long words and varied text density.
+    Returns font size in hundredths of a point (e.g. 1400 = 14pt).
     """
-    wc = _word_count(text)
-    for size in sorted(_FONT_CAPACITY.keys(), reverse=True):
-        if size < min_size:
+    chars = len(text.strip())
+    for size in sorted(_CHAR_CAPACITY.keys(), reverse=True):
+        if size < min_size or size > default_size:
             continue
-        if size > default_size:
-            continue
-        if wc <= _FONT_CAPACITY[size]:
+        if chars <= _CHAR_CAPACITY[size]:
             return size
     return min_size
 
 
 # ── XML builders ────────────────────────────────────────────────────────
 
-def _enable_autofit(bodyPr, word_count: int = 0, capacity: int = 0):
-    """Enable normAutofit on bodyPr so PowerPoint auto-shrinks text.
+def _enable_autofit(bodyPr, text: str = "", capacity: int = 0):
+    """Enable normAutofit on bodyPr so PowerPoint shrinks text to fit at file-open.
 
-    PowerPoint only applies normAutofit shrink at file-open time when
-    ``fontScale`` is set explicitly. Without it, the scale stays at 100%
-    until the user manually edits the text. This function pre-computes
-    ``fontScale`` based on how much the text overflows its expected capacity.
+    PowerPoint only applies normAutofit shrink at load time when ``fontScale``
+    is set explicitly on the element. Without it the scale stays at 100% until
+    the user manually edits the text. This function pre-computes ``fontScale``
+    from the ratio of actual character count to the box capacity at the chosen
+    font size, using a 90% safety margin so slightly-optimistic estimates still
+    produce a result that fits.
 
     Args:
-        bodyPr: The <a:bodyPr> element on the shape.
-        word_count: Actual word count of the text being written.
-        capacity: Nominal word capacity at the chosen font size.
+        bodyPr:   The <a:bodyPr> element on the shape.
+        text:     The full text being written into the shape.
+        capacity: Character capacity of the box at the chosen font size
+                  (from _CHAR_CAPACITY).
     """
     if bodyPr is None:
         return
@@ -189,17 +194,18 @@ def _enable_autofit(bodyPr, word_count: int = 0, capacity: int = 0):
 
     autofit = etree.Element(qn("a:normAutofit"))
 
-    # Pre-compute fontScale when overflow is likely.
-    # Use a tighter effective capacity (80% of nominal) as a safety margin,
-    # since word-count-based estimates can be optimistic.
-    if word_count > 0 and capacity > 0:
-        effective_capacity = capacity * 0.8
-        if word_count > effective_capacity:
-            scale = int(100000 * (effective_capacity / word_count))
-            scale = max(scale, 62500)              # PowerPoint minimum = 62.5%
-            scale = (scale // 2500) * 2500         # PowerPoint steps in 2.5%
+    chars = len(text.strip())
+    if chars > 0 and capacity > 0:
+        # Trigger fontScale when chars exceed 90% of capacity — this catches
+        # cases where our capacity estimate is slightly optimistic and ensures
+        # the text never clips the box edge.
+        effective = capacity * 0.9
+        if chars > effective:
+            scale = int(100000 * (effective / chars))
+            scale = max(scale, 62500)          # PowerPoint minimum = 62.5%
+            scale = (scale // 2500) * 2500     # PowerPoint steps in 2.5%
             autofit.set("fontScale", str(scale))
-            autofit.set("lnSpcReduction", "20000")  # 20% line spacing reduction
+            autofit.set("lnSpcReduction", "10000")  # 10% line-spacing reduction
 
     bodyPr.insert(0, autofit)
 
@@ -357,11 +363,7 @@ def _update_summary(slide, summary: str, relevant_info: str):
     if relevant_info and relevant_info.strip() and not _is_error_text(relevant_info):
         all_text += " " + relevant_info
     font_size = _choose_font_size(all_text, TL.SUMMARY_FONT_SIZE, TL.SUMMARY_FONT_MIN)
-    _enable_autofit(
-        bodyPr,
-        word_count=_word_count(all_text),
-        capacity=_FONT_CAPACITY.get(font_size, 120),
-    )
+    _enable_autofit(bodyPr, text=all_text, capacity=_CHAR_CAPACITY.get(font_size, 620))
 
     # Build summary paragraphs
     summary_lines = [l.strip() for l in summary.split("\n") if l.strip()]
@@ -417,11 +419,7 @@ def _update_implications(slide, main_point: str, sub_points: list):
     # Calculate font size from total text
     all_text = main_point + " " + " ".join(sub_points)
     font_size = _choose_font_size(all_text, TL.IMPLICATIONS_FONT_SIZE, TL.IMPLICATIONS_FONT_MIN)
-    _enable_autofit(
-        bodyPr,
-        word_count=_word_count(all_text),
-        capacity=_FONT_CAPACITY.get(font_size, 120),
-    )
+    _enable_autofit(bodyPr, text=all_text, capacity=_CHAR_CAPACITY.get(font_size, 620))
 
     # Main point — plain paragraph (no bullet)
     txBody.append(_make_paragraph(main_point, font_size, lang="en-GB", space_before=400))
