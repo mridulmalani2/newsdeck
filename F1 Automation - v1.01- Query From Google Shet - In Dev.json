@@ -1,0 +1,903 @@
+{
+  "name": "F1 Automation - v1.01- Query From Google Shet - In Dev",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "9abb4c9f-5210-4f66-acef-52ed028ee689",
+      "name": "Weekly Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        30736,
+        18976
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "fb44439a-1a75-4566-93aa-3f95ad79d14c",
+        "options": {}
+      },
+      "id": "7ad7f66b-54d4-4d7c-a79a-37a619d49944",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        30736,
+        19168
+      ],
+      "webhookId": "fb44439a-1a75-4566-93aa-3f95ad79d14c"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "id": "3d097634-21cf-448c-bcd8-f7dc26b7d48b",
+      "name": "Merge Triggers",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        30960,
+        19072
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1aBziJL01mnzAIrlvApvDS4itzu2MAva8KSMAunEBrug/edit",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Sheet1"
+        },
+        "options": {}
+      },
+      "id": "c12e5229-5c15-46df-9e12-4f28b8f8794a",
+      "name": "Read Search Queries from Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        31184,
+        19072
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "8dkB2SSIGMYzylJs",
+          "name": "Google Sheets Account John"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "QUERY",
+        "options": {}
+      },
+      "id": "047f33f5-095f-4b93-b8ef-45848dc24d45",
+      "name": "Split Search Queries",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        31408,
+        19072
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "url": "https://serpapi.com/search.json",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "serpApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $json.QUERY }}"
+            },
+            {
+              "name": "engine",
+              "value": "google"
+            },
+            {
+              "name": "num",
+              "value": "10"
+            },
+            {
+              "name": "gl",
+              "value": "us"
+            },
+            {
+              "name": "hl",
+              "value": "en"
+            },
+            {
+              "name": "start",
+              "value": "10"
+            },
+            {
+              "name": "tbs",
+              "value": "qdr:m"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "3d5d0196-7025-4757-bf2e-fcb80491eda1",
+      "name": "SerpAPI - Web Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        31632,
+        19072
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "serpApi": {
+          "id": "rmBpWPJs1cYb4ob2",
+          "name": "SerpAPI account 2"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const seenUrls = new Set();\nconst allOrganicResults = [];\nfor (const item of $input.all()) {\n  const results = item.json.organic_results || [];\n  for (const result of results) {\n    if (result.link && !seenUrls.has(result.link)) {\n      seenUrls.add(result.link);\n      allOrganicResults.push(result);\n    }\n  }\n}\nif (allOrganicResults.length === 0) {\n  return [{ json: { error: 'No organic results found', searchCompleted: true } }];\n}\nreturn allOrganicResults.map(result => ({ json: result }));"
+      },
+      "id": "09880d28-e2f2-4573-8fac-4447feb59eda",
+      "name": "Merge Organic Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        31856,
+        19072
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "options": {
+          "reset": false
+        }
+      },
+      "id": "1730524d-bd43-45c1-b252-902b28786072",
+      "name": "Loop Over Items",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        32080,
+        19072
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "27ee05f3-47e4-43f8-9442-c8e6e4f3cb31",
+      "name": "Workflow Complete",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        32304,
+        18736
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": {
+          "__rl": true,
+          "value": "https://www.notion.so/eisnetwork/6048a7d6c5a4471d90f1661f5b043a5b?v=f2a1594f5cb74706bafb5af8890693d8",
+          "mode": "url"
+        },
+        "limit": 1,
+        "filterType": "manual",
+        "filters": {
+          "conditions": [
+            {
+              "key": "URL|url",
+              "condition": "equals",
+              "urlValue": "={{ $json.link }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "39679c4a-2a17-409f-9ebb-1e87adc08f52",
+      "name": "Check URL In Notion",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        32304,
+        18928
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "notionApi": {
+          "id": "bYboD12AfobNoUYP",
+          "name": "Notion F1 Token"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const notionResults = $input.all();\nconst articleData = $('Loop Over Items').item.json;\nconst isDuplicate = notionResults.some(item =>\n  item.json && item.json.id && typeof item.json.id === 'string' && item.json.id.length > 0\n);\nreturn [{ json: { ...articleData, isDuplicate } }];"
+      },
+      "id": "bb10a46a-3453-49c2-95b6-b66d59c6f1a9",
+      "name": "Flag Duplicate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        32528,
+        18928
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "is-duplicate",
+              "leftValue": "={{ $json.isDuplicate }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "32fdfa41-b5cd-4363-8796-61c1d1e84dba",
+      "name": "Is New Article?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        32752,
+        18928
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are an expert Formula 1 technical analyst.\n\nYour task is to produce a detailed summary of the following F1 article based on its URL and available metadata.\n\nArticle information:\n- Title: {{ $json.title }}\n- Source: {{ $json.source }}\n- URL: {{ $json.url }}\n- Snippet: {{ $json.snippet }}\n- Date: {{ $json.date }}\n\nInstructions:\n1. Write a detailed summary (120 words) of what this article likely covers based on the title, source, and snippet.\n2. Highlight the key technical aspects, teams, or innovations mentioned.\n3. The summary must be in English.\n4. Be factual and precise, avoid speculation beyond what the metadata suggests.\n\nRespond ONLY with the summary text, no preamble, no JSON, no bullet points."
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "569cf37b-fb00-4fb1-aafe-995c6c2e9682",
+      "name": "OpenAI Article Summarizer",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.6,
+      "position": [
+        32976,
+        18928
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "VU5acZ7jyIUqkmZU",
+          "name": "Open AI John Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const articleData = $('Is New Article?').item.json;\nconst summary = $json.message?.content || $json.content || $json.text || '';\nreturn [{ json: { ...articleData, content: summary.trim() } }];"
+      },
+      "id": "520e4bef-0641-48b1-bcc8-f86a9245b83a",
+      "name": "Extract Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        33328,
+        18928
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are an expert Formula 1 technical analyst specialized in evaluating the credibility and relevance of F1 technology articles.\n\nYour task is to analyze the following article and provide a detailed evaluation.\n\nArticle Information:\n- Title: {{ $json.title }}\n- Source: {{ $json.source }}\n- URL: {{ $json.url }}\n- Date: {{ $json.date }}\n\nArticle Content:\n{{ $json.content }}\n\n---\n\nEvaluate this article on the following criteria (score 1-5 for each):\n\n1. **CREDIBILITY** (1-5): How trustworthy is the source?\n   - 5: Official F1/FIA source, major motorsport publication (Motorsport.com, Autosport, The Race)\n   - 4: Established sports news outlet with dedicated F1 coverage\n   - 3: General news site with some motorsport coverage\n   - 2: Blog or fan site with unverified claims\n   - 1: Unknown source or clear clickbait\n\n2. **ACCURACY** (1-5): How factually accurate does the content appear?\n   - 5: Claims backed by official statements, technical data, or multiple sources\n   - 4: Claims are plausible and consistent with known F1 technical developments\n   - 3: Some claims unverified but not contradictory\n   - 2: Contains speculative claims presented as facts\n   - 1: Contains obvious inaccuracies or misinformation\n\n3. **RELEVANCE** (1-5): How relevant is this to F1 technology and R&D?\n   - 5: Deep technical analysis of car development, regulations, or innovation\n   - 4: Significant technical content with team development insights\n   - 3: Some technical content mixed with general F1 news\n   - 2: Primarily non-technical (race results, driver news) with minor tech mentions\n   - 1: Not related to F1 technology\n\n4. **OVERALL SCORE** (1-5): Overall quality for a technical F1 database\n\nRespond ONLY with a valid JSON object in this exact format:\n{\n  \"credibility\": <number 1-5>,\n  \"accuracy\": <number 1-5>,\n  \"relevance\": <number 1-5>,\n  \"overall_score\": <number 1-5>,\n  \"evaluation_notes\": \"<brief explanation of your scoring in 2-3 sentences>\",\n  \"should_include\": <true if overall_score >= 3, false otherwise>\n}"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "a4f8a697-17ef-4543-8f1f-6dc097ec5d94",
+      "name": "Agent 2: Article Evaluator",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.6,
+      "position": [
+        34128,
+        18928
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "VU5acZ7jyIUqkmZU",
+          "name": "Open AI John Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const articleData = $('Extract Summary').item.json;\nconst aiResponse = $json.message?.content || $json.content || $json.text || '{}';\nlet evaluation;\ntry {\n  const jsonMatch = aiResponse.match(/\\{[\\s\\S]*\\}/);\n  evaluation = JSON.parse(jsonMatch ? jsonMatch[0] : aiResponse);\n} catch (e) {\n  evaluation = { credibility: 3, accuracy: 3, relevance: 3, overall_score: 3, evaluation_notes: 'Evaluation parsing failed - using default scores', should_include: true };\n}\nreturn { json: { ...articleData, credibility: evaluation.credibility || 3, accuracy: evaluation.accuracy || 3, relevance: evaluation.relevance || 3, overall_score: evaluation.overall_score || 3, evaluation_notes: evaluation.evaluation_notes || 'No notes', should_include: evaluation.should_include !== false } };"
+      },
+      "id": "4eb5cc60-19b6-484b-ab3e-b609b424b8af",
+      "name": "Parse Evaluation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        34480,
+        18928
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "filter-quality",
+              "leftValue": "={{ $json.should_include }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "10bb97ed-0400-4896-a881-835ec22cea50",
+      "name": "Filter Quality Articles",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        34704,
+        18928
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are an expert Formula 1 technical analyst specialized in categorizing F1 technology articles.\n\nYour task is to classify the following article into the most relevant themes.\n\nArticle Information:\n- Title: {{ $json.title }}\n- Source: {{ $json.source }}\n\nArticle Content:\n{{ $json.content }}\n\n---\n\nAvailable themes (select up to 5 most relevant):\n- Aerodynamics: Wings, floor, diffuser, DRS, airflow management\n- Power Unit: Engine, MGU-K, MGU-H, battery, fuel systems\n- Chassis & Suspension: Monocoque, suspension geometry, ride height\n- Electronics & Software: ECU, telemetry, data systems, sensors\n- Materials & Manufacturing: Composites, 3D printing, materials science\n- Testing & Simulation: Wind tunnel, CFD, track testing, simulators\n- Regulations & Compliance: FIA rules, technical directives, cost cap\n- Race Strategy Tech: Pit stop systems, tire management tech, strategy software\n- Driver Interface: Steering wheel, cockpit, displays, controls\n- Safety Innovations: Halo, crash structures, fire suppression, medical\n- Cooling Systems: Radiators, brake cooling, thermal management\n- Data Analysis: Performance analysis, AI/ML in F1, predictive systems\n- Team Collaboration: Factory operations, design processes, partnerships\n- Sustainability: E-fuels, carbon footprint, environmental initiatives\n- General Innovation: Cross-discipline innovations, future concepts\n\nRespond ONLY with a valid JSON object in this exact format:\n{\n  \"primary_theme\": \"<the single most relevant theme>\",\n  \"themes\": [\"<theme1>\", \"<theme2>\", ...],\n  \"summary\": \"<a technical summary of the article in 2-3 sentences focusing on the key technological aspects>\"\n}"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "97f9ddee-0f7a-48b2-b358-edf379d289e9",
+      "name": "Agent 3: Theme Classifier",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.6,
+      "position": [
+        34928,
+        18928
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "VU5acZ7jyIUqkmZU",
+          "name": "Open AI John Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const articleData = $('Parse Evaluation').item.json;\nconst aiResponse = $json.message?.content || $json.content || $json.text || '{}';\nlet classification;\ntry {\n  const jsonMatch = aiResponse.match(/\\{[\\s\\S]*\\}/);\n  classification = JSON.parse(jsonMatch ? jsonMatch[0] : aiResponse);\n} catch (e) {\n  classification = { primary_theme: 'General Innovation', themes: ['General Innovation'], summary: '' };\n}\nconst validThemes = ['Aerodynamics', 'Power Unit', 'Chassis & Suspension', 'Electronics & Software', 'Materials & Manufacturing', 'Testing & Simulation', 'Regulations & Compliance', 'Race Strategy Tech', 'Driver Interface', 'Safety Innovations', 'Cooling Systems', 'Data Analysis', 'Team Collaboration', 'Sustainability', 'General Innovation'];\nconst themes = (classification.themes || []).filter(t => validThemes.includes(t)).slice(0, 5);\nif (themes.length === 0) themes.push('General Innovation');\nconst themesString = themes.join(',');\nreturn { json: { title: articleData.title || 'Untitled Article', url: articleData.link && articleData.link.trim() !== '' ? articleData.link : 'https://unknown.com', source: articleData.source || 'Unknown', publication_date: articleData.date, summary: $('Extract Summary').first().json.content || 'No summary available', primary_theme: validThemes.includes(classification.primary_theme) ? classification.primary_theme : 'General Innovation', themes: themesString, credibility: articleData.credibility || 3, accuracy: articleData.accuracy || 3, relevance: articleData.relevance || 3, overall_score: articleData.overall_score || 3, evaluation_notes: articleData.evaluation_notes || '', implications: $('Extract Implication').first().json.implications || '',\n    analyzed_on: new Date().toISOString() } };\n\n\n"
+      },
+      "id": "2fc48846-0eca-4866-b9d9-61d698f5aa34",
+      "name": "Prepare Notion Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        35280,
+        18928
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "databaseId": {
+          "__rl": true,
+          "value": "https://www.notion.so/eisnetwork/6048a7d6c5a4471d90f1661f5b043a5b?v=f2a1594f5cb74706bafb5af8890693d8",
+          "mode": "url"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Name|title",
+              "title": "={{ $json.title }}"
+            },
+            {
+              "key": "Source|rich_text",
+              "textContent": "={{ $json.source }}"
+            },
+            {
+              "key": "URL|url",
+              "urlValue": "={{ $json.url }}"
+            },
+            {
+              "key": "Summary|rich_text",
+              "textContent": "={{ $json.summary }}"
+            },
+            {
+              "key": "Primary Theme|select",
+              "selectValue": "={{ $json.category }}"
+            },
+            {
+              "key": "Themes|multi_select",
+              "multiSelectValue": "={{ $json.themes }}"
+            },
+            {
+              "key": "Credibility|number",
+              "numberValue": "={{ $json.credibility }}"
+            },
+            {
+              "key": "Accuracy|number",
+              "numberValue": "={{ $json.accuracy }}"
+            },
+            {
+              "key": "Relevance|number",
+              "numberValue": "={{ $json.relevance }}"
+            },
+            {
+              "key": "Overall Score|number",
+              "numberValue": "={{ $json.overall_score }}"
+            },
+            {
+              "key": "Evaluation Notes|rich_text",
+              "textContent": "={{ $json.evaluation_notes }}"
+            },
+            {
+              "key": "Analyzed On|date",
+              "date": "={{ $json.analyzed_on }}"
+            },
+            {
+              "key": "Implications|rich_text",
+              "textContent": "={{ $json.implications }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f70899cd-f1ad-4187-9539-7d2339fadc3e",
+      "name": "Save to Notion",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        35728,
+        19008
+      ],
+      "credentials": {
+        "notionApi": {
+          "id": "bYboD12AfobNoUYP",
+          "name": "Notion F1 Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// ============================================================\n// NODE NAME: Validate Notion Fields\n// POSITION: Between \"Prepare Notion Data\" and \"Save to Notion\"\n// ============================================================\n\nconst data = $input.item.json;\n\n// ── Helpers ──────────────────────────────────────────────────\n\nfunction truncateChars(str, max, suffix = '...') {\n  if (!str) return '';\n  str = String(str);\n  return str.length > max ? str.slice(0, max - suffix.length) + suffix : str;\n}\n\nfunction countWords(str) {\n  if (!str) return 0;\n  return str.trim().split(/\\s+/).filter(Boolean).length;\n}\n\nfunction truncateWords(str, maxWords) {\n  if (!str) return '';\n  const words = str.trim().split(/\\s+/);\n  if (words.length <= maxWords) return str;\n  return words.slice(0, maxWords).join(' ') + '...';\n}\n\nfunction clampScore(val, min = 0, max = 5) {\n  const n = parseFloat(val);\n  if (isNaN(n)) return 3; // default fallback\n  return Math.min(max, Math.max(min, n));\n}\n\nfunction formatDate(raw) {\n  if (!raw) return new Date().toISOString().split('T')[0]; // today as YYYY-MM-DD (Notion default)\n  // Already YYYY-MM-DD\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(raw)) return raw;\n  // DD/MM/YYYY → YYYY-MM-DD\n  const dmyMatch = raw.match(/^(\\d{2})\\/(\\d{2})\\/(\\d{4})$/);\n  if (dmyMatch) return `${dmyMatch[3]}-${dmyMatch[2]}-${dmyMatch[1]}`;\n  // Fallback: try native parse\n  const d = new Date(raw);\n  if (!isNaN(d)) return d.toISOString().split('T')[0];\n  return new Date().toISOString().split('T')[0];\n}\n\nfunction normalizeCategory(str) {\n  if (!str) return 'GENERAL INNOVATION';\n  return truncateChars(str.toUpperCase(), 25, '.');\n}\n\n// ── Field Limits (from NOTION_INPUT_GUIDE.md) ────────────────\nconst TITLE_MAX_CHARS        = 90;\nconst CATEGORY_MAX_CHARS     = 25;\nconst SUMMARY_RELINFO_MAX_W  = 220; // hard word limit (Summary + Relevant Info combined)\nconst SCORE_MIN              = 0;\nconst SCORE_MAX              = 5;\n\n// ── 1. Title ─────────────────────────────────────────────────\nconst title = truncateChars(data.title || 'Untitled Article', TITLE_MAX_CHARS, '...');\n\n// ── 2. Category (mapped from primary_theme) ──────────────────\nconst THEME_TO_CATEGORY = {\n  'Aerodynamics':            'AERODYNAMICS',\n  'Power Unit':              'GENERAL INNOVATION',\n  'Chassis & Suspension':    'GENERAL INNOVATION',\n  'Electronics & Software':  'GENERAL INNOVATION',\n  'Materials & Manufacturing':'GENERAL INNOVATION',\n  'Testing & Simulation':    'TESTING & SIMULATION',\n  'Regulations & Compliance':'REGULATIONS',\n  'Race Strategy Tech':      'COMPETITIVE MOVE',\n  'Driver Interface':        'GENERAL INNOVATION',\n  'Safety Innovations':      'GENERAL INNOVATION',\n  'Cooling Systems':         'COOLING SYSTEMS',\n  'Data Analysis':           'GENERAL INNOVATION',\n  'Team Collaboration':      'M&A',\n  'Sustainability':          'GENERAL INNOVATION',\n  'General Innovation':      'GENERAL INNOVATION',\n};\n\nconst rawTheme    = data.primary_theme || 'General Innovation';\nconst rawCategory = THEME_TO_CATEGORY[rawTheme] || normalizeCategory(rawTheme);\nconst category    = normalizeCategory(rawCategory);\n\n// ── 3. Summary + Relevant Info (shared 220-word budget) ──────\nconst summaryRaw   = String(data.summary || '');\nconst relInfoRaw   = String(data.relevant_info || '');\n\nconst combinedWordCount = countWords(summaryRaw) + countWords(relInfoRaw);\n\nlet summary      = summaryRaw;\nlet relevant_info = relInfoRaw;\n\nif (combinedWordCount > SUMMARY_RELINFO_MAX_W) {\n  // Distribute budget proportionally between the two fields\n  const summaryWords   = countWords(summaryRaw);\n  const relInfoWords   = countWords(relInfoRaw);\n  const total          = summaryWords + relInfoWords || 1;\n\n  const summaryBudget  = Math.floor((summaryWords / total)  * SUMMARY_RELINFO_MAX_W);\n  const relInfoBudget  = SUMMARY_RELINFO_MAX_W - summaryBudget;\n\n  summary       = truncateWords(summaryRaw,  summaryBudget);\n  relevant_info = truncateWords(relInfoRaw,  relInfoBudget);\n}\n\n// ── 4. Publication Date ───────────────────────────────────────\nconst publication_date = formatDate(data.publication_date || data.date || null);\n\n// ── 5. Scores (clamped 0–5) ───────────────────────────────────\nconst credibility   = clampScore(data.credibility);\nconst accuracy      = clampScore(data.accuracy);\nconst relevance     = clampScore(data.relevance);\nconst overall_score = clampScore(data.overall_score);\n\n// ── 6. URL (passthrough) ──────────────────────────────────────\nconst url = data.url || data.link || 'https://unknown.com';\n\n// ── Output ────────────────────────────────────────────────────\nreturn {\n  json: {\n    // Validated fields\n    title,\n    category,\n    summary,\n    relevant_info,\n    publication_date,\n    credibility,\n    accuracy,\n    relevance,\n    overall_score,\n    url,\n\n    // Passthrough (untouched)\n    source:           data.source           || '',\n    themes:           data.themes           || '',\n    primary_theme:    data.primary_theme    || '',\n    evaluation_notes: data.evaluation_notes || '',\n    implications:     data.implications     || '',\n    analyzed_on:      data.analyzed_on      || new Date().toISOString(),\n\n    // Debug info\n    _validation: {\n      title_chars:           title.length,\n      category_chars:        category.length,\n      combined_word_count:   Math.min(combinedWordCount, SUMMARY_RELINFO_MAX_W),\n      was_truncated:         combinedWordCount > SUMMARY_RELINFO_MAX_W,\n    }\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        35504,
+        18928
+      ],
+      "id": "925fa666-dd9a-4a22-ad0d-df97382a1cc0",
+      "name": "Validate Notion Fields"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are an expert Formula 1 technical analyst specialized in giving implication of information given on F1 technology articles.\n\nYour task is to analyze the following article and provide a detailed implication.\nArticle Information:\n- Title: {{ $json.title }}\n- Source: {{ $json.source }}\n- URL: {{ $json.link }}\n- Date: {{ $json.date }}\n\nArticle Content:\n{{ $json.content }}\n\nImplications\n\n•⁠  ⁠Recommended: 110 words total, max 160 words\n•⁠  ⁠Structure: First line = main implication (plain text, no bullet). Subsequent lines should be added without any arrows/bullets just a simple - \n\nExample:\n\n\nMercedes' strong opposition underscores potential instability in F1's technical direction.\n- Such instability could deter OEMs seeking a predictable investment environment.\n- Divergent views among teams may signal a lack of consensus.\n\n\nThis renders as:\n\n•⁠  ⁠Line 1 → plain paragraph\n•⁠  ⁠Lines 2-3 → bulleted sub-points (only because the dashes exist)\nIf there's only one line, it renders as a plain paragraph with no bullets at all."
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "b40c11de-ee5e-413b-b3cc-741d0c802aa5",
+      "name": "Agent: Implication Analyzer",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.6,
+      "position": [
+        33552,
+        18928
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "VU5acZ7jyIUqkmZU",
+          "name": "Open AI John Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const articleData = $('Extract Summary').item.json;\nconst implications = $json.message?.content || $json.content || $json.text || '';\nreturn [{ json: { ...articleData, implications: implications.trim() } }];"
+      },
+      "id": "91ceff3f-a764-45c8-a6e8-925c1b700e17",
+      "name": "Extract Implication",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        33904,
+        18928
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Weekly Schedule": {
+      "main": [
+        [
+          {
+            "node": "Merge Triggers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Merge Triggers",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Triggers": {
+      "main": [
+        [
+          {
+            "node": "Read Search Queries from Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Search Queries from Sheet": {
+      "main": [
+        [
+          {
+            "node": "Split Search Queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Search Queries": {
+      "main": [
+        [
+          {
+            "node": "SerpAPI - Web Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SerpAPI - Web Search": {
+      "main": [
+        [
+          {
+            "node": "Merge Organic Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Organic Results": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Workflow Complete",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check URL In Notion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check URL In Notion": {
+      "main": [
+        [
+          {
+            "node": "Flag Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Flag Duplicate": {
+      "main": [
+        [
+          {
+            "node": "Is New Article?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is New Article?": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Article Summarizer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Article Summarizer": {
+      "main": [
+        [
+          {
+            "node": "Extract Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Summary": {
+      "main": [
+        [
+          {
+            "node": "Agent: Implication Analyzer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent 2: Article Evaluator": {
+      "main": [
+        [
+          {
+            "node": "Parse Evaluation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Evaluation": {
+      "main": [
+        [
+          {
+            "node": "Filter Quality Articles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Quality Articles": {
+      "main": [
+        [
+          {
+            "node": "Agent 3: Theme Classifier",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent 3: Theme Classifier": {
+      "main": [
+        [
+          {
+            "node": "Prepare Notion Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Notion Data": {
+      "main": [
+        [
+          {
+            "node": "Validate Notion Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Notion": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Notion Fields": {
+      "main": [
+        [
+          {
+            "node": "Save to Notion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent: Implication Analyzer": {
+      "main": [
+        [
+          {
+            "node": "Extract Implication",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Implication": {
+      "main": [
+        [
+          {
+            "node": "Agent 2: Article Evaluator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "49089c2d-f447-42b2-8092-17e72b5211a6",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a77d800901306bb0c8c88643981b8c00d8ff2c9d18ba5a149f4f1d4b2db1d59a"
+  },
+  "id": "GV6OhyCDeGMxj4FO",
+  "tags": [
+    {
+      "updatedAt": "2026-01-29T15:42:24.849Z",
+      "createdAt": "2026-01-29T15:42:24.849Z",
+      "id": "UwIjz8dklYET6WnB",
+      "name": "Notion"
+    },
+    {
+      "updatedAt": "2026-01-29T15:42:24.816Z",
+      "createdAt": "2026-01-29T15:42:24.816Z",
+      "id": "ghDkUn7vtKnuoITI",
+      "name": "AI Agents"
+    },
+    {
+      "updatedAt": "2026-01-29T15:42:24.790Z",
+      "createdAt": "2026-01-29T15:42:24.790Z",
+      "id": "mWFRy1VidciATSg5",
+      "name": "F1"
+    }
+  ]
+}
