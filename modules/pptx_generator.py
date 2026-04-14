@@ -169,11 +169,11 @@ def _enable_autofit(bodyPr):
     """Enable normAutofit on bodyPr so PowerPoint auto-shrinks text."""
     if bodyPr is None:
         return
-    for tag in ["a:noAutofit", "a:normAutofit", "a:spAutoFit"]:
-        old = bodyPr.find(qn(tag))
-        if old is not None:
-            bodyPr.remove(old)
-    etree.SubElement(bodyPr, qn("a:normAutofit"))
+    autofit_tags = {qn(t) for t in ("a:noAutofit", "a:normAutofit", "a:spAutoFit")}
+    for el in list(bodyPr.iter()):
+        if el.tag in autofit_tags and el is not bodyPr:
+            el.getparent().remove(el)
+    bodyPr.insert(0, etree.Element(qn("a:normAutofit")))
 
 
 def _make_run(text: str, font_size: int, lang: str = "en-US",
